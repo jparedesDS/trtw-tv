@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>trtw.tv</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="7" fill="url(#logo-gradient)"/>
+            <path d="M7 8.5C7 7.67 7.67 7 8.5 7H19.5C20.33 7 21 7.67 21 8.5V16.5C21 17.33 20.33 18 19.5 18H16L14 21L12 18H8.5C7.67 18 7 17.33 7 16.5V8.5Z" fill="white" fill-opacity="0.95"/>
+            <rect x="10" y="10.5" width="8" height="1.5" rx="0.75" fill="#7c3aed" opacity="0.8"/>
+            <rect x="10" y="13.5" width="5.5" height="1.5" rx="0.75" fill="#7c3aed" opacity="0.5"/>
+            <defs>
+              <linearGradient id="logo-gradient" x1="0" y1="0" x2="28" y2="28">
+                <stop stop-color="#7c3aed"/>
+                <stop offset="1" stop-color="#4f46e5"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="header-text">
+          <h1>trtw.tv</h1>
+          <p class="subtitle">Live Subtitles</p>
+        </div>
+      </div>
+      <div id="status-badge" class="status-badge status-idle">
+        <span class="status-dot"></span>
+        <span id="status-text">Idle</span>
+      </div>
+    </header>
+
+    <!-- Main Toggle -->
+    <div class="toggle-section">
+      <button id="main-toggle" class="main-toggle" aria-label="Toggle subtitles">
+        <div class="toggle-track">
+          <div class="toggle-thumb"></div>
+        </div>
+        <span id="toggle-label" class="toggle-label">Start Subtitles</span>
+      </button>
+      <p class="shortcut-hint">Alt + S</p>
+    </div>
+
+    <!-- Progress Bar (model download) -->
+    <div id="progress-section" class="progress-section hidden">
+      <div class="progress-header">
+        <span id="progress-label">Downloading model...</span>
+        <span id="progress-percent">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="settings">
+      <!-- Model Selection -->
+      <div class="setting-group">
+        <label class="setting-label">
+          <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/>
+            <path d="M6 10v2a6 6 0 0 0 12 0v-2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          Model
+        </label>
+        <select id="model-select" class="select">
+          <option value="onnx-community/whisper-tiny">Tiny (~75 MB)</option>
+          <option value="onnx-community/whisper-base">Base (~150 MB)</option>
+          <option value="onnx-community/whisper-small">Small (~500 MB)</option>
+        </select>
+      </div>
+
+      <!-- Source Language -->
+      <div class="setting-group">
+        <label class="setting-label">
+          <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          Source Language
+        </label>
+        <select id="source-lang" class="select">
+          <option value="auto">Auto-detect</option>
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ru">Russian</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="zh">Chinese</option>
+          <option value="ar">Arabic</option>
+          <option value="hi">Hindi</option>
+        </select>
+      </div>
+
+      <!-- Translation -->
+      <div class="setting-group">
+        <label class="setting-label">
+          <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 7 4 4 20 4 20 7"/>
+            <line x1="9" y1="20" x2="15" y2="20"/>
+            <line x1="12" y1="4" x2="12" y2="20"/>
+          </svg>
+          Translate
+        </label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="translate-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Target Language (visible when translate is on) -->
+      <div id="target-lang-group" class="setting-group hidden">
+        <label class="setting-label">Target Language</label>
+        <select id="target-lang" class="select">
+          <option value="en">English</option>
+          <option value="es" selected>Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ru">Russian</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="zh">Chinese</option>
+          <option value="ar">Arabic</option>
+          <option value="hi">Hindi</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Appearance -->
+      <p class="section-title">Appearance</p>
+
+      <!-- Font Size -->
+      <div class="setting-group">
+        <label class="setting-label">Font Size</label>
+        <div class="range-group">
+          <input type="range" id="font-size" class="range" min="14" max="36" value="20">
+          <span id="font-size-value" class="range-value">20px</span>
+        </div>
+      </div>
+
+      <!-- Opacity -->
+      <div class="setting-group">
+        <label class="setting-label">Background Opacity</label>
+        <div class="range-group">
+          <input type="range" id="bg-opacity" class="range" min="30" max="100" value="78">
+          <span id="bg-opacity-value" class="range-value">78%</span>
+        </div>
+      </div>
+
+      <!-- Text Color -->
+      <div class="setting-group">
+        <label class="setting-label">Text Color</label>
+        <div class="color-options" id="color-options">
+          <button class="color-btn active" data-color="#FFFFFF" style="background:#FFFFFF" title="White"></button>
+          <button class="color-btn" data-color="#FBBF24" style="background:#FBBF24" title="Yellow"></button>
+          <button class="color-btn" data-color="#34D399" style="background:#34D399" title="Green"></button>
+          <button class="color-btn" data-color="#60A5FA" style="background:#60A5FA" title="Blue"></button>
+          <button class="color-btn" data-color="#F472B6" style="background:#F472B6" title="Pink"></button>
+        </div>
+      </div>
+
+      <!-- Position -->
+      <div class="setting-group">
+        <label class="setting-label">Position</label>
+        <select id="position-select" class="select">
+          <option value="bottom">Bottom</option>
+          <option value="top">Top</option>
+          <option value="middle">Middle</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Cloud API -->
+      <div class="setting-group">
+        <label class="setting-label">
+          <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
+          Use OpenAI API (fallback)
+        </label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="cloud-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div id="api-key-group" class="setting-group hidden">
+        <label class="setting-label">API Key</label>
+        <input type="password" id="api-key" class="text-input" placeholder="sk-...">
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>v0.1.0</span>
+      <span class="footer-dot">&middot;</span>
+      <span>trtw.tv</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

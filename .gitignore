@@ -1,0 +1,4 @@
+node_modules/
+extension/offscreen/offscreen.bundle.js
+*.zip
+.claude/

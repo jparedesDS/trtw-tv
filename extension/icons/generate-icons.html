@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head><title>trtw.tv Icon Generator</title></head>
+<body style="background:#111;color:#fff;font-family:sans-serif;padding:40px">
+<h1>trtw.tv Icon Generator</h1>
+<p>Click each button to download the icon, then save to extension/icons/</p>
+<div id="canvases" style="display:flex;gap:20px;margin:20px 0"></div>
+<script>
+const sizes = [16, 48, 128];
+const container = document.getElementById('canvases');
+sizes.forEach(size => {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  
+  // Purple gradient background with rounded corners
+  const r = size * 0.2;
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(size - r, 0);
+  ctx.quadraticCurveTo(size, 0, size, r);
+  ctx.lineTo(size, size - r);
+  ctx.quadraticCurveTo(size, size, size - r, size);
+  ctx.lineTo(r, size);
+  ctx.quadraticCurveTo(0, size, 0, size - r);
+  ctx.lineTo(0, r);
+  ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#7c3aed');
+  grad.addColorStop(1, '#4f46e5');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  
+  // Speech bubble
+  const s = size / 28;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath();
+  const bx = 7*s, by = 7*s, bw = 14*s, bh = 11*s, br = 2*s;
+  ctx.moveTo(bx+br, by);
+  ctx.lineTo(bx+bw-br, by);
+  ctx.quadraticCurveTo(bx+bw, by, bx+bw, by+br);
+  ctx.lineTo(bx+bw, by+bh-br);
+  ctx.quadraticCurveTo(bx+bw, by+bh, bx+bw-br, by+bh);
+  ctx.lineTo(bx+bw*0.6, by+bh);
+  ctx.lineTo(bx+bw*0.5, by+bh+3*s);
+  ctx.lineTo(bx+bw*0.4, by+bh);
+  ctx.lineTo(bx+br, by+bh);
+  ctx.quadraticCurveTo(bx, by+bh, bx, by+bh-br);
+  ctx.lineTo(bx, by+br);
+  ctx.quadraticCurveTo(bx, by, bx+br, by);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Subtitle lines
+  ctx.fillStyle = '#7c3aed';
+  ctx.globalAlpha = 0.7;
+  const lw1 = 8*s, lw2 = 5.5*s, lh = 1.5*s, lr = 0.75*s;
+  // Line 1
+  roundRect(ctx, 10*s, 10.5*s, lw1, lh, lr);
+  ctx.fill();
+  // Line 2
+  ctx.globalAlpha = 0.45;
+  ctx.beginPath();
+  roundRect(ctx, 10*s, 13.5*s, lw2, lh, lr);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  
+  // Display
+  const div = document.createElement('div');
+  div.style.textAlign = 'center';
+  canvas.style.border = '1px solid #333';
+  canvas.style.imageRendering = 'pixelated';
+  canvas.style.width = Math.max(size, 64) + 'px';
+  canvas.style.height = Math.max(size, 64) + 'px';
+  div.appendChild(canvas);
+  const btn = document.createElement('button');
+  btn.textContent = 'Download icon' + size + '.png';
+  btn.style.cssText = 'margin-top:8px;padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer';
+  btn.onclick = () => {
+    const a = document.createElement('a');
+    a.download = 'icon' + size + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+  div.appendChild(document.createElement('br'));
+  div.appendChild(btn);
+  container.appendChild(div);
+});
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+</script>
+</body>
+</html>

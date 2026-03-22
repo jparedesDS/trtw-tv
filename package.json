@@ -1,0 +1,17 @@
+{
+  "name": "trtw-tv",
+  "version": "0.1.0",
+  "description": "Real-time automatic subtitles for Twitch and YouTube streams",
+  "private": true,
+  "scripts": {
+    "build": "esbuild extension/offscreen/offscreen.js --bundle --outfile=extension/offscreen/offscreen.bundle.js --format=esm --platform=browser --target=es2022",
+    "watch": "esbuild extension/offscreen/offscreen.js --bundle --outfile=extension/offscreen/offscreen.bundle.js --format=esm --platform=browser --target=es2022 --watch",
+    "package": "cd extension && zip -r ../trtw-tv.zip . -x '*.map'"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0"
+  }
+}

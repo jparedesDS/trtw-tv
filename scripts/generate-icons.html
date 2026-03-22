@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>trtw.tv Icon Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f23;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .subtitle { color: #94a3b8; margin-bottom: 32px; }
+    .icons-row {
+      display: flex;
+      gap: 40px;
+      align-items: flex-end;
+      margin-bottom: 40px;
+    }
+    .icon-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .icon-card canvas {
+      border: 1px solid #334155;
+      border-radius: 8px;
+    }
+    .icon-label {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+    .btn {
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn + .btn { margin-left: 12px; }
+    .btn-row { margin-bottom: 16px; }
+    .info {
+      color: #64748b;
+      font-size: 13px;
+      margin-top: 16px;
+      text-align: center;
+      max-width: 500px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h1>trtw.tv Icon Generator</h1>
+  <p class="subtitle">Generate PNG icons for the Chrome extension</p>
+
+  <div class="icons-row">
+    <div class="icon-card">
+      <canvas id="c128" width="128" height="128"></canvas>
+      <span class="icon-label">128 x 128</span>
+    </div>
+    <div class="icon-card">
+      <canvas id="c48" width="48" height="48"></canvas>
+      <span class="icon-label">48 x 48</span>
+    </div>
+    <div class="icon-card">
+      <canvas id="c16" width="16" height="16"></canvas>
+      <span class="icon-label">16 x 16</span>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="downloadAll()">Download All Icons</button>
+  </div>
+
+  <p class="info">
+    Click "Download All Icons" to save icon16.png, icon48.png, and icon128.png.<br>
+    Place them in <code>extension/icons/</code> to replace the placeholders.
+  </p>
+
+  <script>
+    const sizes = [
+      { id: 'c16',  size: 16,  name: 'icon16.png'  },
+      { id: 'c48',  size: 48,  name: 'icon48.png'  },
+      { id: 'c128', size: 128, name: 'icon128.png' },
+    ];
+
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+      const s = size; // shorthand
+
+      // Clear
+      ctx.clearRect(0, 0, s, s);
+
+      // Background: purple gradient rounded rect
+      const r = s * 0.22; // corner radius proportional to size
+      const grad = ctx.createLinearGradient(0, 0, s, s);
+      grad.addColorStop(0, '#7c3aed');
+      grad.addColorStop(1, '#4f46e5');
+
+      ctx.beginPath();
+      roundRect(ctx, 0, 0, s, s, r);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Speech bubble (white)
+      const bx = s * 0.20;  // bubble left
+      const by = s * 0.18;  // bubble top
+      const bw = s * 0.60;  // bubble width
+      const bh = s * 0.42;  // bubble height
+      const br = s * 0.08;  // bubble corner radius
+
+      ctx.beginPath();
+      roundRect(ctx, bx, by, bw, bh, br);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.fill();
+
+      // Speech bubble tail (triangle pointing down)
+      const tailX = s * 0.45;
+      const tailY = by + bh;
+      const tailW = s * 0.10;
+      const tailH = s * 0.12;
+      ctx.beginPath();
+      ctx.moveTo(tailX - tailW * 0.5, tailY - 1);
+      ctx.lineTo(tailX, tailY + tailH);
+      ctx.lineTo(tailX + tailW * 0.8, tailY - 1);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.fill();
+
+      // Text lines inside bubble (purple bars)
+      if (size >= 32) {
+        // Line 1: longer
+        const l1x = bx + bw * 0.15;
+        const l1y = by + bh * 0.30;
+        const l1w = bw * 0.70;
+        const l1h = s * 0.055;
+        const l1r = l1h / 2;
+        ctx.beginPath();
+        roundRect(ctx, l1x, l1y, l1w, l1h, l1r);
+        ctx.fillStyle = 'rgba(124, 58, 237, 0.8)';
+        ctx.fill();
+
+        // Line 2: shorter
+        const l2x = l1x;
+        const l2y = by + bh * 0.58;
+        const l2w = bw * 0.48;
+        const l2h = l1h;
+        const l2r = l2h / 2;
+        ctx.beginPath();
+        roundRect(ctx, l2x, l2y, l2w, l2h, l2r);
+        ctx.fillStyle = 'rgba(124, 58, 237, 0.5)';
+        ctx.fill();
+      } else {
+        // For very small icons (16px), draw simpler lines
+        const l1x = bx + bw * 0.15;
+        const l1y = by + bh * 0.33;
+        const l1w = bw * 0.70;
+        ctx.fillStyle = 'rgba(124, 58, 237, 0.8)';
+        ctx.fillRect(Math.round(l1x), Math.round(l1y), Math.round(l1w), Math.max(1, Math.round(s * 0.06)));
+
+        const l2x = l1x;
+        const l2y = by + bh * 0.60;
+        const l2w = bw * 0.48;
+        ctx.fillStyle = 'rgba(124, 58, 237, 0.5)';
+        ctx.fillRect(Math.round(l2x), Math.round(l2y), Math.round(l2w), Math.max(1, Math.round(s * 0.06)));
+      }
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function downloadCanvas(canvas, filename) {
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function downloadAll() {
+      sizes.forEach(({ id, name }) => {
+        const canvas = document.getElementById(id);
+        setTimeout(() => downloadCanvas(canvas, name), 0);
+      });
+    }
+
+    // Draw all icons on load
+    sizes.forEach(({ id, size }) => {
+      const canvas = document.getElementById(id);
+      drawIcon(canvas, size);
+    });
+  </script>
+</body>
+</html>

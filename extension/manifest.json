@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "trtw.tv — Live Subtitles",
+  "version": "0.1.0",
+  "description": "Real-time automatic subtitles for Twitch and YouTube streams. Powered by Whisper AI.",
+  "minimum_chrome_version": "121",
+
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "storage",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "*://*.twitch.tv/*",
+    "*://*.youtube.com/*"
+  ],
+
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.twitch.tv/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content/overlay.js"],
+      "css": ["content/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "commands": {
+    "toggle-subtitles": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S"
+      },
+      "description": "Toggle subtitles on/off"
+    }
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

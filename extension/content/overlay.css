@@ -1,0 +1,117 @@
+/* trtw.tv — Netflix-quality subtitle overlay */
+/* All selectors prefixed with #trtw- to avoid conflicts */
+
+/* Inter font loaded via system fallback — external @import blocked by site CSP */
+
+#trtw-subtitle-container {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  pointer-events: none;
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#trtw-subtitle-text {
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  color: var(--trtw-text-color, #FFFFFF);
+  font-size: var(--trtw-font-size, 20px);
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  padding: 8px 20px;
+  border-radius: 8px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6),
+               0 0 1px rgba(0, 0, 0, 0.4);
+  max-width: 100%;
+  text-align: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+
+  /* Netflix-style animation */
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#trtw-subtitle-text.trtw-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#trtw-subtitle-text.trtw-fading {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Language badge */
+#trtw-lang-badge {
+  position: absolute;
+  top: -24px;
+  right: 0;
+  background: rgba(124, 58, 237, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#trtw-lang-badge.trtw-visible {
+  opacity: 1;
+}
+
+/* Status indicator */
+#trtw-status {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22C55E;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#trtw-status.trtw-active {
+  opacity: 1;
+  animation: trtw-pulse 2s ease-in-out infinite;
+}
+
+@keyframes trtw-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(34, 197, 94, 0.6); }
+  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.9); }
+}
+
+/* Position variants */
+#trtw-subtitle-container.trtw-position-top {
+  bottom: auto;
+  top: 64px;
+}
+
+#trtw-subtitle-container.trtw-position-middle {
+  bottom: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
