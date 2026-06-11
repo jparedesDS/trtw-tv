@@ -1,6 +1,7 @@
 // trtw.tv Popup — Settings UI controller
 
 const DEFAULT_SETTINGS = {
+  engine: 'whisper',
   modelId: 'onnx-community/whisper-tiny',
   sourceLanguage: 'auto',
   task: 'transcribe',
@@ -11,7 +12,8 @@ const DEFAULT_SETTINGS = {
   bgOpacity: 0.78,
   subtitlePosition: 'bottom',
   useCloudApi: false,
-  cloudApiKey: ''
+  cloudApiKey: '',
+  geminiApiKey: ''
 };
 
 let settings = { ...DEFAULT_SETTINGS };
@@ -31,7 +33,11 @@ function initElements() {
   els.progressLabel = document.getElementById('progress-label');
   els.progressPercent = document.getElementById('progress-percent');
   els.progressFill = document.getElementById('progress-fill');
+  els.engineSelect = document.getElementById('engine-select');
+  els.modelGroup = document.getElementById('model-group');
   els.modelSelect = document.getElementById('model-select');
+  els.geminiKeyGroup = document.getElementById('gemini-key-group');
+  els.geminiKey = document.getElementById('gemini-key');
   els.sourceLang = document.getElementById('source-lang');
   els.translateToggle = document.getElementById('translate-toggle');
   els.targetLangGroup = document.getElementById('target-lang-group');
@@ -58,7 +64,9 @@ async function loadSettings() {
   }
 
   // Apply to UI
+  els.engineSelect.value = settings.engine;
   els.modelSelect.value = settings.modelId;
+  els.geminiKey.value = settings.geminiApiKey;
   els.sourceLang.value = settings.sourceLanguage;
   els.translateToggle.checked = settings.translateToEnglish;
   els.targetLang.value = settings.targetLanguage;
@@ -78,6 +86,17 @@ async function loadSettings() {
 
   // API key visibility
   els.apiKeyGroup.classList.toggle('hidden', !settings.useCloudApi);
+
+  // Engine-dependent visibility
+  updateEngineUI();
+}
+
+// Show the Whisper model picker for the local engine, or the Gemini API key
+// field for the cloud engine.
+function updateEngineUI() {
+  const isGemini = settings.engine === 'gemini';
+  els.modelGroup.classList.toggle('hidden', isGemini);
+  els.geminiKeyGroup.classList.toggle('hidden', !isGemini);
 }
 
 function saveSettings() {
@@ -144,9 +163,22 @@ function setupListeners() {
     }
   });
 
+  // Engine selection
+  els.engineSelect.addEventListener('change', () => {
+    settings.engine = els.engineSelect.value;
+    updateEngineUI();
+    saveSettings();
+  });
+
   // Model selection
   els.modelSelect.addEventListener('change', () => {
     settings.modelId = els.modelSelect.value;
+    saveSettings();
+  });
+
+  // Gemini API key input
+  els.geminiKey.addEventListener('input', () => {
+    settings.geminiApiKey = els.geminiKey.value;
     saveSettings();
   });
 
@@ -223,7 +255,9 @@ chrome.runtime.onMessage.addListener((message) => {
 
   if (message.status === 'loading') {
     els.progressSection.classList.remove('hidden');
-    els.progressLabel.textContent = 'Loading model...';
+    els.progressLabel.textContent = message.modelId === 'Gemini Live'
+      ? 'Connecting to Gemini Live...'
+      : 'Loading model...';
     els.progressPercent.textContent = '';
     els.progressFill.style.width = '0%';
   } else if (message.status === 'ready') {

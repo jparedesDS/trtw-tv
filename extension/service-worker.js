@@ -154,7 +154,7 @@ async function ensureOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: 'offscreen/offscreen.html',
     reasons: ['USER_MEDIA'],
-    justification: 'Capture tab audio and run Whisper transcription'
+    justification: 'Capture tab audio for Whisper or Gemini Live transcription'
   });
 }
 

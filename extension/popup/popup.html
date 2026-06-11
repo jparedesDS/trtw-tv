@@ -63,8 +63,22 @@
 
     <!-- Settings -->
     <div class="settings">
-      <!-- Model Selection -->
+      <!-- Engine Selection -->
       <div class="setting-group">
+        <label class="setting-label">
+          <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          Engine
+        </label>
+        <select id="engine-select" class="select">
+          <option value="whisper">Whisper (local, offline)</option>
+          <option value="gemini">Gemini Live (cloud, low-latency)</option>
+        </select>
+      </div>
+
+      <!-- Whisper Model Selection -->
+      <div class="setting-group" id="model-group">
         <label class="setting-label">
           <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/>
@@ -78,6 +92,17 @@
           <option value="onnx-community/whisper-base">Base (~150 MB)</option>
           <option value="onnx-community/whisper-small">Small (~500 MB)</option>
         </select>
+      </div>
+
+      <!-- Gemini API Key (visible when Gemini engine is selected) -->
+      <div class="setting-group hidden" id="gemini-key-group">
+        <label class="setting-label">
+          <svg class="setting-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+          </svg>
+          Gemini API Key
+        </label>
+        <input type="password" id="gemini-key" class="text-input" placeholder="AIza...">
       </div>
 
       <!-- Source Language -->
@@ -211,7 +236,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-      <span>v0.1.0</span>
+      <span>v0.2.0</span>
       <span class="footer-dot">&middot;</span>
       <span>trtw.tv</span>
     </footer>

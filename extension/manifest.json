@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "trtw.tv — Live Subtitles",
-  "version": "0.1.0",
-  "description": "Real-time automatic subtitles for Twitch and YouTube streams. Powered by Whisper AI.",
+  "version": "0.2.0",
+  "description": "Real-time automatic subtitles for Twitch and YouTube streams. Powered by local Whisper AI or the Gemini Live API.",
   "minimum_chrome_version": "121",
 
   "permissions": [

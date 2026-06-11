@@ -3,6 +3,7 @@
 
 import { pipeline } from '@huggingface/transformers';
 import { translateText, translateWithOpenAI } from '../utils/translation.js';
+import { GeminiLiveClient } from '../utils/gemini-live.js';
 
 let audioContext = null;
 let mediaStream = null;
@@ -10,6 +11,7 @@ let workletNode = null;
 let transcriber = null;
 let isTranscribing = false;
 let pendingChunk = null;
+let geminiClient = null;
 
 const WHISPER_SAMPLE_RATE = 16000;
 const VAD_THRESHOLD = 0.008;
@@ -18,12 +20,14 @@ const VAD_THRESHOLD = 0.008;
 
 async function getSettings() {
   const defaults = {
+    engine: 'whisper',
     modelId: 'onnx-community/whisper-tiny',
     sourceLanguage: 'auto',
     task: 'transcribe',
     targetLanguage: 'en',
     useCloudApi: false,
-    cloudApiKey: ''
+    cloudApiKey: '',
+    geminiApiKey: ''
   };
 
   try {
@@ -149,10 +153,54 @@ async function transcribeChunk(audioData) {
   }
 }
 
+// ── Gemini Live ─────────────────────────────────────────────────
+
+async function startGemini(settings) {
+  if (!settings.geminiApiKey) {
+    throw new Error('Gemini API key is required. Add it in the extension popup.');
+  }
+
+  chrome.runtime.sendMessage({
+    type: 'model-progress',
+    status: 'loading',
+    modelId: 'Gemini Live'
+  });
+
+  const translate = settings.task === 'translate';
+
+  geminiClient = new GeminiLiveClient({
+    apiKey: settings.geminiApiKey,
+    translate,
+    sourceLanguage: settings.sourceLanguage,
+    targetLanguage: settings.targetLanguage || 'en',
+    onTranscript: (text) => {
+      if (!text) return;
+      chrome.runtime.sendMessage({
+        type: 'transcription',
+        text,
+        language: settings.sourceLanguage,
+        timestamp: Date.now()
+      });
+    },
+    onError: (error) => {
+      console.error('[trtw.tv] Gemini Live error:', error);
+      chrome.runtime.sendMessage({ type: 'capture-error', error });
+    }
+  });
+
+  await geminiClient.connect();
+
+  chrome.runtime.sendMessage({ type: 'model-progress', status: 'ready' });
+  console.log('[trtw.tv] Gemini Live session ready');
+}
+
 // ── Audio Capture ───────────────────────────────────────────────
 
 async function startCapture(streamId) {
   try {
+    const settings = await getSettings();
+    const engine = settings.engine || 'whisper';
+
     // Get MediaStream from tab
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -182,12 +230,21 @@ async function startCapture(streamId) {
     // Create source from MediaStream
     const source = audioContext.createMediaStreamSource(mediaStream);
 
+    // Gemini streams continuously, so emit small frequent frames. Whisper
+    // works on ~3s windows, so accumulate larger chunks.
+    const chunkDurationSec = engine === 'gemini' ? 0.25 : 3;
+
     // Create AudioWorklet node
     workletNode = new AudioWorkletNode(audioContext, 'audio-chunk-processor', {
       processorOptions: {
-        chunkDurationSec: 3
+        chunkDurationSec
       }
     });
+
+    // Connect the Gemini Live session before audio starts flowing.
+    if (engine === 'gemini') {
+      await startGemini(settings);
+    }
 
     // Listen for audio chunks from the worklet
     workletNode.port.onmessage = (event) => {
@@ -199,7 +256,11 @@ async function startCapture(streamId) {
           audioData = resample(audioData, audioContext.sampleRate, WHISPER_SAMPLE_RATE);
         }
 
-        transcribeChunk(audioData);
+        if (engine === 'gemini') {
+          if (geminiClient) geminiClient.sendAudio(audioData);
+        } else {
+          transcribeChunk(audioData);
+        }
       }
     };
 
@@ -209,13 +270,17 @@ async function startCapture(streamId) {
     // Connect source directly to output so user continues hearing audio
     source.connect(audioContext.destination);
 
-    console.log('[trtw.tv] Audio capture started');
+    console.log(`[trtw.tv] Audio capture started (engine: ${engine})`);
 
-    // Start loading the model in parallel
-    initWhisper().catch(console.error);
+    // Start loading the local model in parallel (Gemini needs no download).
+    if (engine !== 'gemini') {
+      initWhisper().catch(console.error);
+    }
 
   } catch (error) {
     console.error('[trtw.tv] Failed to start capture:', error);
+    // Release any audio/socket resources already created before the failure.
+    stopCapture();
     chrome.runtime.sendMessage({
       type: 'capture-error',
       error: error.message
@@ -238,6 +303,11 @@ function stopCapture() {
   if (audioContext) {
     audioContext.close();
     audioContext = null;
+  }
+
+  if (geminiClient) {
+    geminiClient.close();
+    geminiClient = null;
   }
 
   pendingChunk = null;

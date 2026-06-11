@@ -1,6 +1,6 @@
 {
   "name": "trtw-tv",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Real-time automatic subtitles for Twitch and YouTube streams",
   "private": true,
   "scripts": {
