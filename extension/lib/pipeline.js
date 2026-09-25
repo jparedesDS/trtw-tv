@@ -1,25 +1,31 @@
-// Pipeline de subtítulos (fase 2: Whisper en worker, trozos de 3 s).
-// La segmentación por voz llega en la fase 3.
+// Pipeline de subtítulos: VAD → Streamer (Whisper en worker) → subtítulos.
+// Lo usan el documento offscreen y la página de test (mismo código).
 
+import * as ort from 'onnxruntime-web';
 import { AsrClient } from './asr-client.js';
+import { SileroVad } from './vad.js';
+import { Streamer } from './streamer.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('pipeline');
-const CHUNK = 16000 * 3;
 
 export class Pipeline {
-  constructor({ baseUrl, settings, onStatus, onSubtitle, onFatal }) {
-    this.settings = settings;
-    this.onStatus = onStatus;
-    this.onSubtitle = onSubtitle;
-    this.onFatal = onFatal;
+  constructor({ baseUrl, settings, onStatus, onSubtitle, onFatal, onDebug }) {
+    this.baseUrl = baseUrl;
+    this.settings = { ...settings };
+    this.onStatus = onStatus || (() => {});
+    this.onSubtitle = onSubtitle || (() => {});
+    this.onFatal = onFatal || (() => {});
+    this.onDebug = onDebug || (() => {});
     this.ready = false;
-    this.buffer = new Float32Array(CHUNK);
-    this.fill = 0;
-    this.busy = false;
+    this.loaded = null; // { modelId, device } realmente cargados
+    this.seq = 0;
+
     this.asr = new AsrClient({
       baseUrl,
-      onProgress: (p) => this.onStatus({ progress: { stage: p.stage, pct: p.pct, loaded: p.loaded, total: p.total } })
+      onProgress: (p) => this.onStatus({
+        progress: { stage: p.stage, pct: p.pct, loaded: p.loaded, total: p.total }
+      })
     });
   }
 
@@ -28,37 +34,73 @@ export class Pipeline {
   }
 
   async load() {
+    // ORT del hilo principal: solo para el VAD (diminuto) → 1 hilo, WASM local.
+    ort.env.wasm.wasmPaths = this.baseUrl + 'vendor/ort/';
+    ort.env.wasm.numThreads = 1;
+    this.vad = await SileroVad.create(ort, this.baseUrl + 'models/silero/silero_vad_v5.onnx');
+    log.info('Silero VAD listo');
+
     await this.asr.ready;
     const info = await this.asr.loadAsr(this.settings.modelId, this.settings.device);
-    this.onStatus({ device: info.device, gpuName: info.gpuName, gpuReason: info.gpuReason, modelId: info.modelId, progress: null });
+    this.loaded = info;
+    log.info(`Whisper: ${info.modelId} en ${info.device}`, info.gpuName || '', info.gpuReason || '');
+    this.onStatus({
+      device: info.device,
+      gpuName: info.gpuName,
+      gpuReason: info.gpuReason,
+      modelId: info.modelId,
+      progress: null
+    });
+
+    this.streamer = new Streamer({
+      vad: this.vad,
+      asr: this.asr,
+      log,
+      onPartial: (p) => this._partial(p),
+      onCommit: (c) => this._commit(c),
+      onReject: (r) => {
+        log.debug(`Descartado (${r.reason}):`, r.text);
+        this.onDebug({ type: 'reject', ...r });
+      },
+      onStats: (stats) => this.onStatus({ stats: { latencyMs: Math.round(stats.latencyMs), asrMs: Math.round(stats.asrMs), rtf: stats.rtf } }),
+      onError: (e, fatal) => {
+        if (fatal) this.onFatal(new Error(`Whisper falla repetidamente: ${e.message}`));
+      }
+    });
     this.ready = true;
   }
 
-  updateSettings(s) { this.settings = { ...this.settings, ...s }; }
-
-  resetStream() { this.fill = 0; }
+  updateSettings(s) {
+    this.settings = { ...this.settings, ...s };
+  }
 
   pushFrame(frame) {
-    if (!this.ready) return;
-    this.buffer.set(frame.subarray(0, Math.min(frame.length, CHUNK - this.fill)), this.fill);
-    this.fill += frame.length;
-    if (this.fill < CHUNK) return;
-    const chunk = this.buffer.slice(0);
-    this.fill = 0;
-    if (!this.busy) this.transcribe(chunk);
+    if (this.ready) this.streamer.pushFrame(frame);
   }
 
-  async transcribe(chunk) {
-    this.busy = true;
-    try {
-      const { text } = await this.asr.transcribe(chunk);
-      if (text) this.onSubtitle({ kind: 'final', en: text, es: text });
-    } catch (e) {
-      log.warn('Fallo de transcripción:', e.message); // no mata la sesión
-    } finally {
-      this.busy = false;
-    }
+  resetStream() {
+    this.streamer?.reset();
   }
 
-  dispose() { this.asr.terminate(); }
+  _partial({ text }) {
+    if (!this.settings.showPartial) return;
+    this.onSubtitle({ kind: 'partial', en: text, es: null });
+  }
+
+  _commit(c) {
+    const id = ++this.seq;
+    this.onDebug({ type: 'commit', id, ...c });
+    this.onSubtitle({ kind: 'final', id, en: c.text, es: c.text, latencyMs: c.latencyMs });
+  }
+
+  // Para la página de test.
+  flush() { return this.streamer?.flush(); }
+  idle() { return this.streamer?.idle(); }
+
+  dispose() {
+    this.ready = false;
+    this.streamer?.reset();
+    this.asr.terminate();
+    this.vad?.release();
+  }
 }
