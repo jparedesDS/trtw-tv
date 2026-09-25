@@ -55,7 +55,8 @@ const common = {
 
 // Módulos ES (páginas de la extensión y workers).
 const esmEntries = {
-  offscreen: 'extension/offscreen/offscreen.js'
+  offscreen: 'extension/offscreen/offscreen.js',
+  'asr-worker': 'extension/workers/asr-worker.js'
 };
 
 // Scripts clásicos (content scripts no admiten módulos ES).
