@@ -1,8 +1,33 @@
 // trtw.tv Content Script — Subtitle Overlay for Twitch & YouTube
 // Injects Netflix-quality subtitles over the video player
 
+import { createChromeTranslator } from '../lib/chrome-translator.js';
+
 (() => {
   'use strict';
+
+  // ── Relé de traducción (Translator API de Chrome en la pestaña) ──
+  let translatorPromise = null;
+  function getTranslator() {
+    translatorPromise ??= createChromeTranslator().then((r) => {
+      if (!r.translator) translatorPromise = null; // reintentar más tarde
+      return r;
+    });
+    return translatorPromise;
+  }
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== 'trtw-translate') return false;
+    getTranslator().then(async (r) => {
+      if (!r.translator) return sendResponse({ ok: false, availability: r.availability, error: r.error });
+      if (message.op === 'probe') return sendResponse({ ok: true });
+      try {
+        sendResponse({ ok: true, text: await r.translator.translate(message.text) });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message });
+      }
+    });
+    return true;
+  });
 
   // ── Site Detection ──────────────────────────────────────────
 

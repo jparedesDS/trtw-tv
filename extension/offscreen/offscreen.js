@@ -104,7 +104,7 @@ async function start({ streamId, tabId, settings }) {
       (e) => fail(e)
     );
   } else {
-    pipeline.resetStream();
+    await pipeline.prepareForTab();
     setStatus({ state: 'capturing' });
   }
 }

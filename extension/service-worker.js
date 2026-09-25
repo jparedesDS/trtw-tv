@@ -97,6 +97,12 @@ async function startCapture(tabId) {
     return { success: false, error };
   }
 
+  // Solo tiene sentido en Twitch/YouTube (es donde se inyecta el overlay).
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab?.url || !/^https?:\/\/([^/]+\.)?(twitch\.tv|youtube\.com)\//.test(tab.url)) {
+    return { success: false, error: 'Abre un directo de Twitch o un vídeo de YouTube y vuelve a pulsar Start.' };
+  }
+
   const status = await getStatus();
 
   // Ya capturando esta pestaña → nada que hacer.
