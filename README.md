@@ -95,9 +95,11 @@ Opciones:
 - **Contexto**: se traduce junto a la frase anterior para mejorar la concordancia.
 - **Glosario**: términos que no se traducen (gg, clutch, nerf, nombres propios,
   emotes…), uno por línea. `término = traducción` fuerza una traducción concreta.
-- **Estilo**: *Frase a frase* (por defecto, como en las plataformas de vídeo:
-  cada frase sustituye a la anterior, se mantiene lo necesario para leerla y
-  las largas se dividen en páginas) o *Continuo* (las frases se van acumulando).
+- **Estilo** de los subtítulos:
+  - *Híbrido* (recomendado): si ya leíste la frase, la siguiente la sustituye;
+    si llega antes, la completa por detrás. Ni se salta frases ni acumula retraso.
+  - *Frase a frase*: una frase cada vez, con cola (si se acumulan, van algo más rápido).
+  - *Continuo*: las frases se van acumulando y lo más antiguo sale por arriba.
 - **Bilingüe**: muestra el inglés original debajo del español.
 - **Texto provisional**: la hipótesis aún no confirmada, en gris.
 

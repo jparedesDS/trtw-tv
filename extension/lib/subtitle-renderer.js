@@ -1,18 +1,24 @@
 // Pintado de subtítulos (compartido por el content script y la página de test).
 //
-// Dos estilos (ajuste `subtitleMode`):
+// Tres estilos (ajuste `subtitleMode`):
 //
-//  - 'phrase' (por defecto, como en las plataformas de vídeo): se muestra una
-//    frase cada vez, el tiempo necesario para leerla; si no cabe en 2 líneas,
-//    se divide en "páginas". Las frases que llegan mientras tanto esperan en
-//    cola (nunca se salta ninguna) y, si se acumulan, se muestran algo más
-//    rápido para no quedarse atrás. El texto provisional (gris) aparece solo
-//    cuando no queda nada confirmado por mostrar, y nunca pegado a una frase.
+//  - 'hybrid' (por defecto): cuando ya ha dado tiempo a leer la frase en
+//    pantalla, la siguiente la SUSTITUYE (empieza limpia); si llega antes, se
+//    AÑADE detrás completando el bloque (lo más antiguo sale por arriba si no
+//    cabe). No se salta ninguna frase ni se acumula retraso.
+//
+//  - 'phrase' (frase a frase): una frase cada vez, el tiempo necesario para
+//    leerla. Las que llegan mientras tanto esperan en cola (nunca se salta
+//    ninguna) y, si se acumulan, se muestran algo más rápido.
 //
 //  - 'rolling' (continuo): las frases se van acumulando y la más antigua sale
 //    por arriba; el provisional va detrás, en gris.
 //
-// En ambos: español grande, inglés opcional debajo (bilingüe), máximo 2
+// En 'hybrid' y 'phrase', una frase sola que no cabe en 2 líneas se divide en
+// "páginas", y el texto provisional (gris) aparece solo cuando ya se ha leído
+// todo, nunca pegado a una frase.
+//
+// En todos: español grande, inglés opcional debajo (bilingüe), máximo 2
 // líneas por idioma y sin parpadeos (solo hay transición al aparecer y al
 // desaparecer).
 
@@ -28,8 +34,8 @@ export function readingMs(text) {
   return Math.min(5000, Math.max(1200, String(text || '').length * 50));
 }
 
-// Tiempo que se muestra una página según cuántas frases esperan detrás:
-// con cola se acelera para no acumular retraso respecto al directo.
+// Modo frase a frase: con frases esperando en cola se acelera para no
+// acumular retraso respecto al directo.
 export function dwellMs(text, waiting) {
   const base = readingMs(text);
   if (waiting >= 3) return 800;
@@ -42,10 +48,11 @@ export class SubtitleRenderer {
     this.doc = doc;
     this.now = now || (() => Date.now());
     this.finals = [];     // [{ id, es, en }] (modo continuo)
-    this.current = null;  // frase en pantalla (modo frase): { es, en, pages, page, pageShownAt }
-    this.pending = [];    // frases confirmadas esperando su turno (modo frase)
+    // Bloque en pantalla (híbrido / frase): { parts: [{ es, en }], pages, page, pageShownAt, retired }
+    this.current = null;
+    this.pending = [];    // bloques esperando su turno (solo frase a frase)
     this.partial = null;  // { es, en }
-    this.settings = { bilingual: false, showPartial: true, subtitleMode: 'phrase' };
+    this.settings = { bilingual: false, showPartial: true, subtitleMode: 'hybrid' };
 
     const el = (tag, cls) => {
       const e = doc.createElement(tag);
@@ -78,8 +85,13 @@ export class SubtitleRenderer {
     return this.root.isConnected;
   }
 
+  // 'hybrid' y 'phrase' comparten el pintado por bloques; 'rolling' va aparte.
   get phraseMode() {
     return this.settings.subtitleMode !== 'rolling';
+  }
+
+  get queueMode() {
+    return this.settings.subtitleMode === 'phrase';
   }
 
   applySettings(s) {
@@ -99,10 +111,18 @@ export class SubtitleRenderer {
       const f = { id: msg.id, es: msg.es || msg.en, en: msg.en };
       this.finals.push(f);
       if (this.finals.length > KEEP_FINALS) this.finals.shift();
-      // Se muestra ya si no hay nada pendiente de leer; si no, espera su turno.
-      const item = { ...f, pages: null, page: 0, pageShownAt: this.now(), retired: false };
-      if (this._currentDone(this.now())) this.current = item;
-      else this.pending.push(item);
+      const now = this.now();
+      const block = () => ({ parts: [f], pages: null, page: 0, pageShownAt: now, retired: false });
+      if (this._currentDone(now)) {
+        // Ya leída: la frase nueva empieza un bloque limpio.
+        this.current = block();
+      } else if (this.queueMode) {
+        // Frase a frase: espera su turno.
+        this.pending.push(block());
+      } else {
+        // Híbrido: aún se está leyendo → se completa el bloque con la nueva.
+        this._appendToBlock(f, now);
+      }
       // El provisional correspondía a esta frase: el siguiente llegará enseguida.
       this.partial = null;
       clearTimeout(this.partialClearTimer);
@@ -158,7 +178,7 @@ export class SubtitleRenderer {
       this.current.pages = null;
       this.current.page = 0;
     }
-    for (const p of this.pending) p.pages = null;
+    for (const b of this.pending) b.pages = null;
   }
 
   // ¿La frase actual ya se ha leído entera (o no hay ninguna)?
@@ -167,7 +187,7 @@ export class SubtitleRenderer {
     if (!cur || cur.retired) return true;
     if (!cur.pages) return false; // aún ni se ha pintado
     if (cur.page < cur.pages.length - 1) return false;
-    return now - cur.pageShownAt >= dwellMs(cur.pages[cur.page], this.pending.length);
+    return now - cur.pageShownAt >= this._dwell(cur.pages[cur.page]);
   }
 
   // ── Pintado ────────────────────────────────────────────────
@@ -191,8 +211,16 @@ export class SubtitleRenderer {
     else this._renderRolling(showEn);
   }
 
-  // Modo frase: la frase actual página a página, luego las que esperan en cola
-  // y, cuando ya no queda nada confirmado, el provisional. Nunca juntos.
+  // Tiempo en pantalla de una página (acelera si hay cola en frase a frase).
+  _dwell(page) {
+    if (page.ms != null) return page.ms; // texto ya empezado a leer: solo lo que faltaba
+    const extra = page.extra || 0;
+    return (this.queueMode ? dwellMs(page.read, this.pending.length) : readingMs(page.read)) + extra;
+  }
+
+  // Híbrido / frase a frase: el bloque actual (página a página si es largo),
+  // luego los que esperan en cola y, cuando ya se ha leído todo y hay algo
+  // nuevo, el provisional. Nunca juntos.
   _renderPhrase(showEn) {
     const partial = this.settings.showPartial ? this.partial : null;
     const now = this.now();
@@ -203,10 +231,10 @@ export class SubtitleRenderer {
     }
 
     if (cur) {
-      // Avanza páginas y frases de la cola según su tiempo de lectura.
+      // Avanza páginas y bloques de la cola según su tiempo de lectura.
       for (;;) {
-        if (!cur.pages) cur.pages = this._paginate(this.esLine, cur.es);
-        const dwell = dwellMs(cur.pages[cur.page], this.pending.length);
+        if (!cur.pages) cur.pages = this._blockPages(cur.parts);
+        const dwell = this._dwell(cur.pages[cur.page]);
         if (now - cur.pageShownAt < dwell) break;
         if (cur.page < cur.pages.length - 1) {
           cur.pageShownAt += dwell;
@@ -220,20 +248,19 @@ export class SubtitleRenderer {
         }
       }
 
+      const page = cur.pages[cur.page];
       const lastPage = cur.page === cur.pages.length - 1;
-      const due = cur.pageShownAt + dwellMs(cur.pages[cur.page], this.pending.length);
+      const due = cur.pageShownAt + this._dwell(page);
       const read = now >= due;
 
       if (!(lastPage && read && partial)) {
-        const more = cur.pages.length > 1 && !lastPage ? ' …' : '';
-        this._paint(this.esLine, [cur.pages[cur.page] + more], '');
-        if (showEn) this._fitHead(this.enLine, cur.en);
-        // Siguiente cambio: otra página, la siguiente frase o el provisional.
+        this._paint(this.esLine, [page.es + (lastPage ? '' : ' …')], '');
+        if (showEn) this._fitHead(this.enLine, page.en);
         if (!read && (!lastPage || this.pending.length || partial)) this._tick(due - now);
         this._armHide(Math.max(0, due - now) + HIDE_AFTER_MS);
         return;
       }
-      // Ya leída, sin nada en cola y hay algo nuevo: se retira y no vuelve.
+      // Ya leído, sin cola y hay algo nuevo: el bloque se retira y no vuelve.
       cur.retired = true;
     }
 
@@ -246,6 +273,50 @@ export class SubtitleRenderer {
     }
     this._armHide();
   }
+
+  // Híbrido: la frase nueva completa el bloque. Lo que aún no se ha leído
+  // (desde la página actual) se conserva con el tiempo que le faltaba; lo ya
+  // leído sí desaparece. Nunca se salta texto sin leer.
+  _appendToBlock(f, now) {
+    const cur = this.current;
+    if (!cur.pages) {
+      // Aún no se ha pintado (p. ej. sin montar): se junta sin más.
+      cur.parts.push(f);
+      return;
+    }
+    const unread = cur.pages.slice(cur.page).map((p) => ({ ...p }));
+    const first = unread[0];
+    const left = Math.max(300, this._dwell(first) - (now - cur.pageShownAt));
+    unread[0] = { es: first.es, en: first.en, ms: left };
+    cur.parts.push(f);
+    cur.pages = this._addPart(unread, f);
+    cur.page = 0;
+    cur.pageShownAt = now;
+  }
+
+  // Páginas de un bloque: [{ es, en, read, extra?, ms? }]. `read` es el texto
+  // nuevo de la página (marca su tiempo en pantalla) y `ms`, si existe, un
+  // tiempo fijo (texto que ya se estaba leyendo).
+  _blockPages(parts) {
+    return parts.reduce((pages, part) => this._addPart(pages, part), []);
+  }
+
+  // Añade una frase: junto a la última página si caben en 2 líneas; si no, en
+  // páginas propias.
+  _addPart(pages, part) {
+    const lastP = pages[pages.length - 1];
+    if (lastP) {
+      const es = lastP.es + ' ' + part.es;
+      this._paint(this.esLine, [es], '');
+      if (this._fits(this.esLine)) {
+        const merged = { es, en: `${lastP.en || ''} ${part.en || ''}`.trim(), ms: this._dwell(lastP) + readingMs(part.es) };
+        return [...pages.slice(0, -1), merged];
+      }
+    }
+    return pages.concat(this._paginate(this.esLine, part.es).map((es) => ({ es, en: part.en, read: es })));
+  }
+
+
 
   _tick(ms) {
     clearTimeout(this.tickTimer);
