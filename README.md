@@ -11,6 +11,22 @@ reproductor, con 1,5–3 s de retraso.
 - **Frases completas y sin texto inventado** antes que velocidad: detector de voz
   Silero VAD, confirmación por *local agreement* y filtro anti-alucinaciones.
 
+![Subtítulos en español sobre un directo](store/images/screenshot-1-subtitulos.png)
+
+<table>
+  <tr>
+    <td width="50%"><img src="store/images/screenshot-2-bilingue.png" alt="Modo bilingüe con texto provisional en gris"></td>
+    <td width="50%"><img src="store/images/screenshot-3-ajustes.png" alt="Popup con el estado, el backend y los ajustes"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Modo bilingüe: inglés debajo y texto provisional en gris</sub></td>
+    <td align="center"><sub>Popup: estado, backend en uso (WebGPU/WASM) y ajustes</sub></td>
+  </tr>
+</table>
+
+<sub>Las capturas del overlay se generan con el CSS y el código reales de la
+extensión sobre una escena de ejemplo (<code>node store/render.mjs</code>).</sub>
+
 ## Requisitos
 
 | | |
@@ -98,6 +114,8 @@ Popup → **Página de test** (o `chrome-extension://<id>/test/test.html`).
    descartó y por qué, y el registro.
 
 **Analizar solo VAD** dibuja la probabilidad de voz sin descargar ningún modelo.
+
+![Página de test analizando el ejemplo de JFK con el detector de voz](docs/images/pagina-test.png)
 
 ## Cómo comprobar WebGPU
 
