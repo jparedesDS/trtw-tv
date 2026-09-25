@@ -32,5 +32,9 @@
       <li><div class="ico">⌨️</div><div><h2>Alt + S</h2><p>Activa o desactiva los subtítulos sin abrir el menú.</p></div></li>
     </ul>
   </div>
+  <script>
+    // Señal para store/render.mjs: todo cargado (imágenes y fuentes incluidas).
+    window.addEventListener('load', () => { document.body.dataset.ready = '1'; });
+  </script>
 </body>
 </html>

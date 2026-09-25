@@ -94,7 +94,8 @@ export function judgeSegment(seg, ctx = {}, opts = {}) {
   const reject = (reason) => ({ text, reject: true, reason });
 
   if (!norm) return reject('vacío o solo anotaciones');
-  if (!/[a-z]/i.test(norm)) return reject('sin letras');
+  // Solo números ("3, 2, 1", "2024") es habla real; solo símbolos, no.
+  if (!/[\p{L}\p{N}]/u.test(norm)) return reject('sin letras ni números');
 
   // Texto con muchos caracteres no latinos en un modelo solo-inglés = basura.
   const letters = norm.replace(/[^\p{L}]/gu, '');

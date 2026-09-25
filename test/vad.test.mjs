@@ -52,3 +52,26 @@ test('Silero VAD detecta la voz del ejemplo de JFK y los silencios entre frases'
   }
   assert.ok(pauses >= 1, 'sin pausas detectadas');
 });
+
+test('Silero VAD: llamadas simultáneas se serializan y reset() descarta lo anterior', { skip: !ort && 'onnxruntime-node no disponible' }, async () => {
+  const model = await readFile(new URL('../extension/models/silero/silero_vad_v5.onnx', import.meta.url));
+  const audio = await readWav16k('./fixtures/jfk.wav');
+  const frames = [];
+  for (let i = 0; i < 40; i++) frames.push(audio.slice(16000 + i * 512, 16000 + (i + 1) * 512));
+
+  const a = await SileroVad.create(ort, model, ['cpu']);
+  const sequential = [];
+  for (const f of frames) sequential.push(await a.process(f));
+
+  const b = await SileroVad.create(ort, model, ['cpu']);
+  const concurrent = await Promise.all(frames.map((f) => b.process(f)));
+  assert.deepEqual(concurrent, sequential, 'mismo resultado que en secuencia');
+
+  // Tramas encoladas antes de reset(): se ignoran (0) y no contaminan el estado nuevo.
+  const stale = frames.map((f) => b.process(f));
+  b.reset();
+  const fresh = [];
+  for (const f of frames) fresh.push(await b.process(f));
+  assert.ok((await Promise.all(stale)).slice(1).every((p) => p === 0));
+  assert.deepEqual(fresh, sequential);
+});

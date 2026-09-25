@@ -53,3 +53,9 @@ test('duplicado de la frase anterior', () => {
 test('caracteres no latinos (modelo solo inglés) fuera', () => {
   assert.equal(judgeSegment({ text: 'ご視聴ありがとうございました' }, good).reject, true);
 });
+
+test('frases solo con números son habla real', () => {
+  assert.equal(judgeSegment({ text: '3, 2, 1.' }, good).reject, false);
+  assert.equal(judgeSegment({ text: '2024.' }, good).reject, false);
+  assert.equal(judgeSegment({ text: '... !!' }, good).reject, true);
+});

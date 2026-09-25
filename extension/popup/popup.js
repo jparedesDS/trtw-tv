@@ -109,18 +109,34 @@ async function onToggle() {
 
 // ── Ajustes ─────────────────────────────────────────────────────
 
+// El popup se destruye en cuanto pierde el foco, así que no podemos confiar en
+// un temporizador: los controles "de un clic" guardan al momento, el texto y
+// los deslizadores con un pequeño retraso, y todo lo pendiente se guarda al
+// cerrarse el popup.
 let saveTimer = null;
 let pendingPatch = {};
-function save(patch) {
+
+function flush() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (!Object.keys(pendingPatch).length) return;
+  const p = pendingPatch;
+  pendingPatch = {};
+  saveSettings(p).catch(console.error);
+}
+
+function save(patch, { debounce = false } = {}) {
   Object.assign(settings, patch);
   Object.assign(pendingPatch, patch);
+  if (!debounce) return flush();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const p = pendingPatch;
-    pendingPatch = {};
-    saveSettings(p).catch(console.error);
-  }, 250);
+  saveTimer = setTimeout(flush, 250);
 }
+
+window.addEventListener('pagehide', flush);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flush();
+});
 
 function bindSettings() {
   const model = $('model-select');
@@ -138,7 +154,8 @@ function bindSettings() {
   $('context-toggle').onchange = (e) => save({ translateWithContext: e.target.checked });
 
   $('glossary').value = settings.glossary;
-  $('glossary').oninput = (e) => save({ glossary: e.target.value });
+  $('glossary').oninput = (e) => save({ glossary: e.target.value }, { debounce: true });
+  $('glossary').onblur = flush;
 
   $('bilingual-toggle').checked = settings.bilingual;
   $('bilingual-toggle').onchange = (e) => save({ bilingual: e.target.checked });
@@ -151,16 +168,18 @@ function bindSettings() {
   $('font-size-value').textContent = settings.fontSize + 'px';
   fs.oninput = () => {
     $('font-size-value').textContent = fs.value + 'px';
-    save({ fontSize: +fs.value });
+    save({ fontSize: +fs.value }, { debounce: true });
   };
+  fs.onchange = flush; // al soltar el deslizador
 
   const op = $('bg-opacity');
   op.value = Math.round(settings.bgOpacity * 100);
   $('bg-opacity-value').textContent = op.value + '%';
   op.oninput = () => {
     $('bg-opacity-value').textContent = op.value + '%';
-    save({ bgOpacity: op.value / 100 });
+    save({ bgOpacity: op.value / 100 }, { debounce: true });
   };
+  op.onchange = flush;
 
   const colors = $('color-options');
   const markColor = () => colors.querySelectorAll('.color-btn').forEach((b) => {

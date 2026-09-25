@@ -152,3 +152,61 @@ test('dedupeOverlap quita palabras repetidas en el corte', () => {
   assert.equal(dedupeOverlap('', 'hola'), 'hola');
   assert.equal(normalizeText("Don't STOP, now!"), "don't stop now");
 });
+
+// ── Robustez tras la revisión ───────────────────────────────────
+
+import { Utterance, STREAMER_DEFAULTS } from '../extension/lib/streamer.js';
+
+test('reset() con el VAD en vuelo: un solo bucle, tramas en orden', async () => {
+  const processed = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const vad = {
+    reset() {},
+    async process(frame) {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, Math.random() * 3));
+      inFlight--;
+      processed.push(frame[0]);
+      return 0.05;
+    }
+  };
+  const s = new Streamer({ vad, asr: { transcribe: async () => ({ segments: [] }) } });
+  const frame = (n) => new Float32Array(FRAME).fill(n);
+  for (let i = 0; i < 5; i++) s.pushFrame(frame(i));
+  s.reset();
+  const after = [];
+  for (let i = 100; i < 140; i++) {
+    after.push(i);
+    s.pushFrame(frame(i));
+    await new Promise((r) => setTimeout(r, 1));
+  }
+  await s.idle();
+  const post = processed.filter((v) => v >= 100);
+  assert.deepEqual(post, after, 'tramas nuevas completas y en orden');
+  assert.ok(maxInFlight <= 2, `a lo sumo la trama antigua en vuelo + la nueva (hubo ${maxInFlight})`);
+});
+
+test('Utterance: el VAD sigue alineado con el audio tras recortes a mitad de trama', () => {
+  const cfg = { ...STREAMER_DEFAULTS };
+  const u = new Utterance(1, 0, cfg);
+  const probs = [0, 0, 0.9, 0.9, 0.9, 0.9, 0, 0, 0.9, 0.9];
+  for (const p of probs) u.append(new Float32Array(512), p);
+  const invariant = () => assert.equal(u.length + u.probPhase, u.probs.length * 512);
+
+  u.trimStart(700); // 1 trama y 188 muestras
+  invariant();
+  assert.equal(u.probPhase, 188);
+  assert.deepEqual(u.probs, probs.slice(1));
+  // La muestra 0 del audio cae en la trama original 1 (silencio); la 400, en la 2 (voz).
+  assert.equal(Math.floor(u.frameAt(0)), 0);
+  assert.equal(u.probs[Math.floor(u.frameAt(400))], 0.9);
+
+  u.trimStart(1000);
+  invariant();
+  u.trimEndFrames(2);
+  invariant();
+  // frameEnd devuelve un corte coherente con el desfase
+  assert.equal(u.frameEnd(0) + u.probPhase, 512);
+});

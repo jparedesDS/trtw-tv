@@ -15,6 +15,11 @@ export class Pipeline {
   constructor({ baseUrl, settings, tabRelay, onStatus, onSubtitle, onFatal, onDebug }) {
     this.baseUrl = baseUrl;
     this.settings = { ...settings };
+    // Modelo y backend con los que se construyó este pipeline. No cambian con
+    // updateSettings(): si el usuario elige otro modelo, isCompatible() lo
+    // detecta y el offscreen crea un pipeline nuevo en el siguiente Start.
+    this.built = { modelId: settings.modelId, device: settings.device };
+    this.streamGen = 0; // cambia en cada resetStream(): invalida lo pendiente
     this.onStatus = onStatus || (() => {});
     this.onSubtitle = onSubtitle || (() => {});
     this.onFatal = onFatal || (() => {});
@@ -51,7 +56,7 @@ export class Pipeline {
   }
 
   isCompatible(s) {
-    return s.modelId === this.settings.modelId && s.device === this.settings.device;
+    return s.modelId === this.built.modelId && s.device === this.built.device;
   }
 
   // Idempotente: si ya se está cargando, devuelve la misma promesa.
@@ -80,7 +85,7 @@ export class Pipeline {
     try {
       await this.asr.ready;
       this._checkDisposed();
-      info = await this.asr.loadAsr(this.settings.modelId, this.settings.device);
+      info = await this.asr.loadAsr(this.built.modelId, this.built.device);
       this._checkDisposed();
     } finally {
       this.asrLoading = false;
@@ -160,6 +165,7 @@ export class Pipeline {
 
   resetStream() {
     this.streamer?.reset();
+    this.streamGen++; // traducciones pendientes del stream anterior: se descartan
     this.prevEn = '';
     this.partialPending = null;
   }
@@ -185,13 +191,14 @@ export class Pipeline {
     while (this.partialPending) {
       const text = this.partialPending;
       const seq = this.seq;
+      const gen = this.streamGen;
       this.partialPending = null;
       let es = null;
       try {
         es = await this.translator.translate(text, this.prevEn);
       } catch { /* el parcial se muestra en inglés */ }
       // Si mientras tanto se confirmó una frase, este parcial ya está viejo.
-      if (seq === this.seq && !this.partialPending) this.onSubtitle({ kind: 'partial', en: text, es });
+      if (seq === this.seq && gen === this.streamGen && !this.partialPending) this.onSubtitle({ kind: 'partial', en: text, es });
     }
     this.partialBusy = false;
   }
@@ -202,16 +209,19 @@ export class Pipeline {
     const id = ++this.seq;
     const t0 = performance.now();
     const prev = this.prevEn;
+    const gen = this.streamGen;
     this.prevEn = c.text;
     this.onDebug({ type: 'commit', id, ...c });
 
     this.finalChain = this.finalChain.then(async () => {
+      if (gen !== this.streamGen) return; // de un stream anterior (otra pestaña, otra prueba)
       let es = null;
       try {
         es = await this.translator.translate(c.text, prev);
       } catch (e) {
         log.warn('Fallo de traducción (se muestra en inglés):', e.message);
       }
+      if (gen !== this.streamGen) return; // se reinició mientras se traducía
       const latencyMs = Math.round(c.latencyMs + (performance.now() - t0));
       this.latencyMs = this.latencyMs == null ? latencyMs : this.latencyMs * 0.7 + latencyMs * 0.3;
       this.onDebug({ type: 'translation', id, en: c.text, es, latencyMs, commit: c });

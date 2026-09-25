@@ -108,7 +108,10 @@ async function start({ streamId, tabId, settings }) {
   // Si el usuario deja de compartir o la pestaña muere, el track termina.
   mediaStream.getAudioTracks()[0]?.addEventListener('ended', () => {
     log.warn('El stream de la pestaña terminó');
+    const endedTab = status.tabId;
     stop();
+    // stop() deja tabId en null: avisamos al service worker para que limpie el overlay.
+    chrome.runtime.sendMessage({ type: 'capture-ended', tabId: endedTab }).catch(() => {});
   });
 
   log.info(`Captura iniciada (AudioContext a ${audioContext.sampleRate} Hz)`);

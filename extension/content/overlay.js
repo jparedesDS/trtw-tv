@@ -6,7 +6,9 @@
 //   offscreen no la tiene disponible.
 //
 // Se compila con esbuild (formato IIFE) porque los content scripts no admiten
-// módulos ES.
+// módulos ES. Se carga por el manifest y, si falta (pestaña abierta antes de
+// instalar o actualizar la extensión), el service worker lo inyecta al pulsar
+// Start con chrome.scripting.
 
 import { SubtitleRenderer } from '../lib/subtitle-renderer.js';
 import { createChromeTranslator } from '../lib/chrome-translator.js';
@@ -14,6 +16,29 @@ import { loadSettings } from '../lib/settings.js';
 
 const PREFIX = '[trtw.tv][overlay]';
 const renderer = new SubtitleRenderer(document);
+
+// ── Una sola instancia viva ─────────────────────────────────────
+// Al actualizar o recargar la extensión, el content script antiguo se queda
+// "huérfano" en las pestañas abiertas (sin chrome.runtime) con su overlay en el
+// DOM. La instancia nueva oculta cualquier overlay que no sea el suyo y las
+// antiguas se retiran solas en cuanto lo detectan.
+const INSTANCE = Math.random().toString(36).slice(2);
+globalThis.__trtwOverlayInstance = INSTANCE;
+renderer.root.dataset.trtwInstance = INSTANCE;
+
+function alive() {
+  return globalThis.__trtwOverlayInstance === INSTANCE && !!chrome.runtime?.id;
+}
+
+function hideOtherInstances() {
+  let style = document.getElementById('trtw-instance-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'trtw-instance-style';
+    (document.head || document.documentElement).appendChild(style);
+  }
+  style.textContent = `#trtw-subtitle-container:not([data-trtw-instance="${INSTANCE}"]) { display: none !important; }`;
+}
 
 // ── Localizar el reproductor ────────────────────────────────────
 
@@ -69,17 +94,25 @@ function attach() {
 // SPA (cambio de canal, modo teatro…): recolocar si el reproductor cambia.
 // Throttle (no debounce): el chat de Twitch muta el DOM sin parar.
 let checkPending = false;
-new MutationObserver(() => {
+const observer = new MutationObserver(() => {
   if (checkPending) return;
   checkPending = true;
   setTimeout(() => {
     checkPending = false;
+    if (!alive()) return retire();
     const player = findPlayer();
     if (!renderer.mounted || (player && !player.contains(renderer.root) && !document.fullscreenElement)) attach();
   }, 500);
-}).observe(document.documentElement, { childList: true, subtree: true });
+});
+observer.observe(document.documentElement, { childList: true, subtree: true });
 
-document.addEventListener('fullscreenchange', () => setTimeout(attach, 50));
+// Instancia huérfana o sustituida: deja de observar y quita su overlay.
+function retire() {
+  observer.disconnect();
+  renderer.unmount();
+}
+
+document.addEventListener('fullscreenchange', () => { if (alive()) setTimeout(attach, 50); });
 
 // ── Ajustes ─────────────────────────────────────────────────────
 
@@ -166,7 +199,11 @@ async function handleTranslate(message) {
 // ── Mensajes ────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!alive()) return false;
   switch (message?.type) {
+    case 'trtw-ping':
+      sendResponse({ ok: true });
+      return false;
     case 'subtitle-update':
       if (!renderer.mounted) attach();
       renderer.update(message);
@@ -187,4 +224,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
+hideOtherInstances();
 attach();

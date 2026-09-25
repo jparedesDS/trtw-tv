@@ -117,6 +117,7 @@ Mostrar subtítulos en español, en tiempo real, del audio en inglés de directo
 | `offscreen` | `Crea un documento oculto de la extensión donde se reproduce y procesa el audio capturado y se ejecutan los modelos de voz y traducción (Web Audio, WebGPU/WASM), que no pueden ejecutarse en el service worker.` |
 | `storage` | `Guarda localmente los ajustes del usuario (modelo, tamaño y color de los subtítulos, glosario de términos).` |
 | `activeTab` | `Permite capturar el audio y mostrar los subtítulos únicamente en la pestaña en la que el usuario activa la extensión.` |
+| `scripting` | `Al pulsar Start, si la pestaña de Twitch/YouTube se abrió antes de instalar o actualizar la extensión y no tiene cargado el overlay de subtítulos, lo inyecta (el mismo script y CSS del paquete) para que los subtítulos se vean sin recargar la página. Solo actúa en la pestaña que el usuario activa.` |
 | Permisos de host (`*://*.twitch.tv/*`, `*://*.youtube.com/*`) | `El content script dibuja los subtítulos sobre el reproductor de vídeo de Twitch y YouTube, se adapta a la pantalla completa y al modo teatro, y puede usar la traducción integrada de Chrome en esa pestaña.` |
 
 **¿Usas código remoto?** → **No, no uso código remoto.**

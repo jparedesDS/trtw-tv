@@ -9,6 +9,7 @@
 
 import { loadSettings, PIPELINE_KEYS } from './lib/settings.js';
 import { createLogger } from './lib/log.js';
+import { withTimeout } from './lib/async.js';
 
 const log = createLogger('sw');
 const OFFSCREEN_PATH = 'offscreen/offscreen.html';
@@ -54,13 +55,11 @@ async function closeOffscreen() {
 
 // Envía un mensaje al offscreen con tiempo máximo de espera.
 function sendToOffscreen(message, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('El documento offscreen no responde')), timeoutMs);
-    chrome.runtime.sendMessage({ ...message, target: 'offscreen' }).then(
-      (resp) => { clearTimeout(timer); resolve(resp); },
-      (err) => { clearTimeout(timer); reject(err); }
-    );
-  });
+  return withTimeout(
+    chrome.runtime.sendMessage({ ...message, target: 'offscreen' }),
+    timeoutMs,
+    'El documento offscreen no responde'
+  );
 }
 
 // Estado real: si no hay offscreen → idle; si no responde → error.
@@ -101,6 +100,15 @@ async function startCapture(tabId) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab?.url || !/^https?:\/\/([^/]+\.)?(twitch\.tv|youtube\.com)\//.test(tab.url)) {
     return { success: false, error: 'Abre un directo de Twitch o un vídeo de YouTube y vuelve a pulsar Start.' };
+  }
+
+  // El overlay tiene que estar en la pestaña: si se abrió antes de instalar o
+  // actualizar la extensión, no tiene el content script y lo inyectamos.
+  try {
+    await ensureOverlay(tabId);
+  } catch (e) {
+    log.error('No se pudo inyectar el overlay:', e.message);
+    return { success: false, error: 'No se pudo preparar la pestaña. Recárgala (F5) y vuelve a pulsar Start.' };
   }
 
   const status = await getStatus();
@@ -155,6 +163,16 @@ async function startCapture(tabId) {
   await chrome.storage.session.set({ activeTabId: tabId });
   log.info('Captura iniciada en la pestaña', tabId);
   return { success: true, status: resp.status };
+}
+
+// ¿Hay un content script vivo en la pestaña? Si no, lo inyectamos.
+async function ensureOverlay(tabId) {
+  const alive = await withTimeout(chrome.tabs.sendMessage(tabId, { type: 'trtw-ping' }), 1000, 'ping')
+    .then((r) => r?.ok === true, () => false);
+  if (alive) return;
+  log.info('La pestaña no tiene el overlay: inyectándolo');
+  await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['dist/overlay.js'] });
 }
 
 async function stopCapture({ keepOffscreen = true } = {}) {
@@ -227,9 +245,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Del offscreen: traducir en la pestaña (Chrome Translator API en el
     // content script, por si no está disponible en el documento offscreen).
     case 'tab-translate':
+      // Sin pestaña (p. ej. un reintento del traductor después de Stop).
+      if (!message.tabId) {
+        sendResponse({ ok: false, error: 'No hay pestaña capturada' });
+        return false;
+      }
       chrome.tabs.sendMessage(message.tabId, { type: 'trtw-translate', op: message.op, text: message.text })
         .then(sendResponse, (e) => sendResponse({ ok: false, error: e.message }));
       return true;
+
+    // Del offscreen: el audio de la pestaña se cortó solo (pestaña cerrada,
+    // captura revocada…). Limpiamos el overlay y el estado como en un Stop.
+    case 'capture-ended':
+      enqueue(async () => {
+        if (message.tabId) sendToTab(message.tabId, { type: 'clear-subtitles' });
+        await chrome.storage.session.remove('activeTabId');
+        setBadge('idle');
+      });
+      return false;
 
     // Del offscreen: lleva un rato parado → liberamos memoria/GPU.
     case 'offscreen-idle':

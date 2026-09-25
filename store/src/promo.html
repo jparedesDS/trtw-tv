@@ -18,5 +18,9 @@
   <div class="row"><img src="logo.svg" alt=""><h1>trtw.tv</h1></div>
   <p>Subtítulos en español en directo para Twitch y YouTube</p>
   <div><span class="sub">Gratis · privado · en tu equipo</span></div>
+  <script>
+    // Señal para store/render.mjs: todo cargado (imágenes y fuentes incluidas).
+    window.addEventListener('load', () => { document.body.dataset.ready = '1'; });
+  </script>
 </body>
 </html>

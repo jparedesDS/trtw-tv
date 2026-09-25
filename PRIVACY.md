@@ -44,6 +44,7 @@ traducción también se hace en tu equipo.
 | `offscreen` | Procesar el audio y ejecutar los modelos en un documento oculto de la extensión. |
 | `storage` | Guardar tus ajustes. |
 | `activeTab` | Actuar solo sobre la pestaña en la que activas la extensión. |
+| `scripting` | Si la pestaña se abrió antes de instalar o actualizar la extensión, cargar en ella el overlay de subtítulos al pulsar Start. |
 | Acceso a twitch.tv y youtube.com | Mostrar los subtítulos sobre el reproductor. |
 
 ## Cambios y contacto

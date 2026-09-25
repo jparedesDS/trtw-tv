@@ -57,7 +57,8 @@ export function dedupeOverlap(prev, next, gapSec = 0) {
   return next;
 }
 
-class Utterance {
+// Exportada solo para los tests.
+export class Utterance {
   constructor(id, startSample, cfg) {
     this.id = id;
     this.cfg = cfg;
@@ -65,6 +66,10 @@ class Utterance {
     this.audio = new Float32Array(cfg.sampleRate * 12);
     this.length = 0;
     this.probs = [];        // prob. de voz por trama
+    // Muestras de la primera trama de `probs` que ya no están en `audio` (tras
+    // recortar en mitad de una trama). Se cumple siempre:
+    //   length + probPhase === probs.length * frameSize
+    this.probPhase = 0;
     this.speechFrames = 0;
     this.silenceRun = 0;    // tramas seguidas de silencio al final
     this.prev = null;       // segmentos de la hipótesis anterior (para el acuerdo)
@@ -99,7 +104,9 @@ class Utterance {
     this.audio.copyWithin(0, samples, this.length);
     this.length -= samples;
     this.startSample += samples;
-    this.probs.splice(0, Math.floor(samples / this.cfg.frameSize));
+    const total = this.probPhase + samples;
+    this.probs.splice(0, Math.floor(total / this.cfg.frameSize));
+    this.probPhase = total % this.cfg.frameSize;
     this.speechFrames = this.probs.filter((p) => p >= this.cfg.speechThreshold).length;
     this.lastRunLength = Math.max(0, this.lastRunLength - samples);
   }
@@ -111,11 +118,21 @@ class Utterance {
     this.length = Math.max(0, this.length - frames * this.cfg.frameSize);
   }
 
+  // Índice de trama (en `probs`) de una muestra del audio.
+  frameAt(sample) {
+    return (sample + this.probPhase) / this.cfg.frameSize;
+  }
+
+  // Muestra del audio donde termina la trama `i` de `probs`.
+  frameEnd(i) {
+    return Math.min(this.length, (i + 1) * this.cfg.frameSize - this.probPhase);
+  }
+
   // Fracción de tramas con voz entre dos instantes (segundos relativos).
   speechRatio(startSec, endSec) {
-    const fps = this.cfg.sampleRate / this.cfg.frameSize;
-    const a = Math.max(0, Math.floor((startSec ?? 0) * fps));
-    const b = Math.min(this.probs.length, Math.ceil((endSec ?? this.length / this.cfg.sampleRate) * fps));
+    const sr = this.cfg.sampleRate;
+    const a = Math.max(0, Math.floor(this.frameAt((startSec ?? 0) * sr)));
+    const b = Math.min(this.probs.length, Math.ceil(this.frameAt((endSec ?? this.length / sr) * sr)));
     if (b <= a) return 0;
     let speech = 0;
     for (let i = a; i < b; i++) if (this.probs[i] >= this.cfg.silenceThreshold) speech++;
@@ -182,9 +199,10 @@ export class Streamer {
       } catch (e) {
         this.log.warn('Fallo del VAD en una trama:', e.message);
       }
-      if (gen !== this.generation) break;
+      if (gen !== this.generation) return; // reset(): ya hay (o habrá) otro bucle; no tocar su estado
       this._onFrame(frame, prob);
     }
+    if (gen !== this.generation) return;
     this.pumping = false;
     this._notifyIdle();
   }
@@ -253,11 +271,12 @@ export class Streamer {
     for (let i = probs.length - 1; i >= from; i--) {
       if (probs[i] < bestP - 1e-6) { bestP = probs[i]; best = i; }
     }
-    const cut = Math.min(utt.length, (best + 1) * this.cfg.frameSize);
+    const cut = utt.frameEnd(best);
 
     const head = new Utterance(utt.id, utt.startSample, this.cfg);
     head.append(utt.audio.subarray(0, cut), 1);
     head.probs = probs.slice(0, best + 1);
+    head.probPhase = utt.probPhase;
     head.speechFrames = head.probs.filter((p) => p >= this.cfg.speechThreshold).length;
 
     utt.trimStart(cut);
