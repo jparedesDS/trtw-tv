@@ -119,9 +119,42 @@ function getTranslator() {
   return translatorPromise;
 }
 
+// La descarga del modelo de Chrome necesita un gesto del usuario. Si se
+// arrancó con Alt+S (sin pasar por el popup), aprovechamos el siguiente clic o
+// tecla en la página para iniciarla. Una sola vez; el offscreen cambiará a
+// Chrome solo cuando termine.
+let downloadArmed = false;
+function armDownloadOnGesture() {
+  if (downloadArmed) return;
+  downloadArmed = true;
+  const onGesture = () => {
+    window.removeEventListener('pointerdown', onGesture, true);
+    window.removeEventListener('keydown', onGesture, true);
+    renderer.setStatus('trtw.tv · descargando el traductor de Chrome…');
+    createChromeTranslator({
+      allowDownload: true,
+      onProgress: (pct) => renderer.setStatus(`trtw.tv · descargando el traductor de Chrome ${pct}%`)
+    }).then((r) => {
+      downloadArmed = false;
+      if (r.translator) {
+        translatorPromise = Promise.resolve(r); // lo reutiliza el relé
+        renderer.setStatus('trtw.tv · traductor de Chrome listo', { timeout: 2500 });
+      } else {
+        console.warn(PREFIX, 'No se pudo descargar el traductor de Chrome:', r.error || r.availability);
+        renderer.setStatus(null);
+      }
+    });
+  };
+  window.addEventListener('pointerdown', onGesture, true);
+  window.addEventListener('keydown', onGesture, true);
+}
+
 async function handleTranslate(message) {
   const r = await getTranslator();
-  if (!r.translator) return { ok: false, availability: r.availability, error: r.error };
+  if (!r.translator) {
+    if (r.availability === 'downloadable') armDownloadOnGesture();
+    return { ok: false, availability: r.availability, error: r.error };
+  }
   if (message.op === 'probe') return { ok: true };
   try {
     return { ok: true, text: await r.translator.translate(message.text) };

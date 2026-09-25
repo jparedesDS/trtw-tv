@@ -18,6 +18,7 @@ let pipeline = null;
 let audio16k = null;     // Float32Array a 16 kHz (modo rápido y VAD)
 let audioBuffer = null;  // AudioBuffer original (modo tiempo real)
 let running = null;      // { stop() }
+let loadingModels = false;
 let rows = 0;
 
 const renderer = new SubtitleRenderer(document);
@@ -78,7 +79,7 @@ function setButtons() {
   $('fast').disabled = !ready || !audio16k || !!running;
   $('stop').disabled = !running;
   $('vad').disabled = !audio16k || !!running;
-  $('load').disabled = !!running;
+  $('load').disabled = !!running || loadingModels;
 }
 
 // ── Audio ───────────────────────────────────────────────────────
@@ -165,10 +166,14 @@ function onDebug(ev) {
 
 $('load').addEventListener('click', async () => {
   const s = currentSettings();
-  // La descarga del modelo de Chrome exige un gesto del usuario: lo aprovechamos ya.
+  // La descarga del modelo de Chrome exige un gesto del usuario: lo aprovechamos
+  // ya. El traductor creado aquí no se usa (el pipeline crea el suyo): se libera.
   if (s.translationEngine !== 'opus') {
     createChromeTranslator({ allowDownload: true, onProgress: (pct) => showProgress({ stage: 'chrome', pct }) })
-      .then((r) => log(`Translator API: ${r.availability}${r.error ? ' — ' + r.error : ''}`));
+      .then((r) => {
+        r.translator?.destroy?.();
+        log(`Translator API: ${r.availability}${r.error ? ' — ' + r.error : ''}`);
+      });
   }
   if (pipeline && pipeline.isCompatible(s) && pipeline.ready) {
     pipeline.updateSettings(s);
@@ -176,10 +181,11 @@ $('load').addEventListener('click', async () => {
     return;
   }
   pipeline?.dispose();
-  $('load').disabled = true;
   log(`Cargando ${s.modelId} (backend ${s.device}, traducción ${s.translationEngine})…`);
   const t0 = performance.now();
-  pipeline = new Pipeline({
+  // Referencia local: si mientras tanto se crea otro pipeline, este clic ya no
+  // debe tocar la variable global.
+  const p = new Pipeline({
     baseUrl: BASE,
     settings: s,
     onStatus,
@@ -187,15 +193,24 @@ $('load').addEventListener('click', async () => {
     onDebug,
     onFatal: (e) => log('ERROR FATAL', e.message)
   });
-  try {
-    await pipeline.load();
-    log(`Modelos listos en ${((performance.now() - t0) / 1000).toFixed(1)} s`);
-  } catch (e) {
-    log('ERROR', e.message);
-    pipeline = null;
-  }
-  showProgress(null);
+  pipeline = p;
+  loadingModels = true;
   setButtons();
+  try {
+    await p.load();
+    if (pipeline === p) log(`Modelos listos en ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  } catch (e) {
+    if (pipeline === p) {
+      log('ERROR', e.message);
+      p.dispose();
+      pipeline = null;
+    }
+  }
+  if (pipeline === p || !pipeline) {
+    loadingModels = false;
+    showProgress(null);
+    setButtons();
+  }
 });
 
 // ── Ejecución ───────────────────────────────────────────────────

@@ -46,7 +46,8 @@ popup ──(start/stop/get-state)──▶ service-worker ──▶ offscreen d
 | `extension/lib/glossary.js` | **nuevo**. Parseo del glosario y protección con marcadores. |
 | `extension/lib/translator.js` | **nuevo**. Motores: Chrome Translator, relé a la pestaña, Opus-MT. Contexto y caché. |
 | `extension/lib/chrome-translator.js` | **nuevo**. Envoltorio de la Translator API con timeouts (sin gesto del usuario, `create()` puede colgarse). |
-| `extension/lib/asr-client.js` | **nuevo**. Cliente con promesas para el worker. |
+| `extension/lib/async.js` | **nuevo**. `withTimeout` compartido. |
+| `extension/lib/inference-client.js` | **nuevo**. Cliente con promesas para los workers (uno para Whisper y otro para Opus-MT). |
 | `extension/lib/pipeline.js` | **nuevo**. Une VAD + Streamer + ASR + traducción; lo usan offscreen y la página de test. |
 | `extension/lib/settings.js`, `log.js` | **nuevos**. Ajustes por defecto y logs con prefijo `[trtw.tv]`. |
 | `extension/workers/asr-worker.js` | **nuevo**. Whisper (`onnx-community/whisper-*.en`) con WebGPU/WASM + Opus-MT. |

@@ -16,5 +16,8 @@
   "dependencies": {
     "@huggingface/transformers": "~3.8.1"
   },
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=21"
+  }
 }
