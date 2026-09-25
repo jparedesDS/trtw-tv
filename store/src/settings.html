@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .wrap { display: flex; gap: 64px; padding: 0 72px; height: 680px; align-items: flex-start; }
+    .popup { width: 380px; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.6); border: 1px solid #2a2a2e; }
+    .popup img { display: block; width: 380px; }
+    ul { list-style: none; padding: 0; margin-top: 24px; }
+    li { display: flex; gap: 16px; margin-bottom: 26px; }
+    li .ico { font-size: 28px; width: 40px; text-align: center; }
+    li h2 { font-size: 22px; margin-bottom: 4px; }
+    li p { font-size: 17px; color: #adadb8; line-height: 1.45; max-width: 620px; }
+  </style>
+</head>
+<body>
+  <div class="headline">
+    <img class="logo" src="logo.svg" alt="">
+    <div>
+      <h1>Todo en tu equipo, <span class="accent">sin cuentas ni claves</span></h1>
+      <p>Whisper + traducción local · WebGPU o CPU · gratis</p>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="popup"><img src="../images/_popup.png" alt=""></div>
+    <ul>
+      <li><div class="ico">🔒</div><div><h2>Privado</h2><p>El audio se procesa en tu navegador: no se graba ni se envía a ningún servidor.</p></div></li>
+      <li><div class="ico">⚡</div><div><h2>Sin gráfica NVIDIA</h2><p>WebGPU con la gráfica integrada (Intel, AMD, Apple) y, si no hay, la CPU.</p></div></li>
+      <li><div class="ico">🎯</div><div><h2>Sin texto inventado</h2><p>Detector de voz que ignora música y efectos, y filtro de frases alucinadas.</p></div></li>
+      <li><div class="ico">📖</div><div><h2>Glosario</h2><p>gg, clutch, nerf, emotes o nombres propios se quedan tal cual.</p></div></li>
+      <li><div class="ico">⌨️</div><div><h2>Alt + S</h2><p>Activa o desactiva los subtítulos sin abrir el menú.</p></div></li>
+    </ul>
+  </div>
+</body>
+</html>

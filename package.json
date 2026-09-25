@@ -8,7 +8,7 @@
     "watch": "node scripts/build.mjs --watch",
     "prepare": "node scripts/build.mjs",
     "test": "node --test \"test/*.test.mjs\"",
-    "package": "npm run build && cd extension && zip -r ../trtw-tv.zip . -x \"*.map\""
+    "package": "npm run build && node scripts/package.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.0"

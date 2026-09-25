@@ -127,6 +127,36 @@ Popup → **Página de test** (o `chrome-extension://<id>/test/test.html`).
 **Borrar modelos descargados**: DevTools del documento offscreen → *Application*
 → *Cache Storage* → `transformers-cache`.
 
+## Publicar en la Chrome Web Store
+
+Todo lo necesario está preparado en el repo:
+
+| Qué | Dónde |
+|---|---|
+| Paquete `.zip` (funciona en Windows, sin `zip`) | `npm run package` → `trtw-tv-<versión>.zip` |
+| Textos de la ficha (ES/EN), justificación de permisos, respuestas de privacidad e instrucciones para el revisor | [`store/LISTING.md`](store/LISTING.md) |
+| Política de privacidad | [`PRIVACY.md`](PRIVACY.md) |
+| Capturas 1280×800 y mosaico 440×280 | [`store/images/`](store/images/) (se regeneran con `node store/render.mjs`) |
+
+Pasos:
+
+1. **Pruébala de verdad** antes de publicar: página de test con el ejemplo de
+   JFK y un directo de Twitch en inglés.
+2. Sube `version` en `extension/manifest.json` (la tienda no acepta repetirla).
+3. `npm run package`: compila, comprueba que no falte nada y crea el zip.
+4. Crea la cuenta en <https://chrome.google.com/webstore/devconsole> (pago
+   único de registro y verificación en dos pasos).
+5. *Añadir elemento* → sube el zip y rellena cada pestaña copiando de
+   [`store/LISTING.md`](store/LISTING.md).
+6. La política de privacidad tiene que ser accesible: haz público el repo (o
+   publica `PRIVACY.md` en GitHub Pages) y pon su URL.
+7. Empieza con visibilidad **No listada**, compártela con algunos usuarios y,
+   cuando esté probada, pásala a **Pública**.
+
+Las capturas actuales son una maqueta hecha con el CSS y el renderer reales del
+overlay. Cuando la tengas funcionando en Twitch, conviene sustituirlas por
+capturas reales (1280×800).
+
 ## Cómo funciona
 
 ```
@@ -157,7 +187,7 @@ Plan y reparto de ficheros: [`docs/PLAN-v2.md`](docs/PLAN-v2.md).
 ```bash
 npm run watch   # recompila al guardar
 npm test        # tests unitarios (Node): remuestreo, VAD, streamer, filtro, glosario, traducción
-npm run package # genera trtw-tv.zip
+npm run package # compila y genera trtw-tv-<versión>.zip para la Chrome Web Store
 ```
 
 Después de recompilar, pulsa ↻ en `chrome://extensions`.

@@ -6,3 +6,5 @@ extension/vendor/
 extension/offscreen/offscreen.bundle.js
 *.zip
 .claude/
+# Imagen intermedia de store/render.mjs
+store/images/_*.png

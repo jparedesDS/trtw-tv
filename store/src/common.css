@@ -1,0 +1,36 @@
+/* Estilos comunes de las imágenes de la tienda (1280×800 y 440×280). */
+* { box-sizing: border-box; margin: 0; }
+body {
+  width: 1280px; height: 800px; overflow: hidden;
+  background: #0e0e10; color: #efeff1;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif;
+}
+.headline { height: 120px; display: flex; align-items: center; gap: 18px; padding: 0 56px; }
+.headline .logo { width: 56px; height: 56px; }
+.headline h1 { font-size: 38px; font-weight: 800; letter-spacing: -0.01em; }
+.headline p { font-size: 20px; color: #adadb8; margin-top: 4px; }
+.accent { color: #a78bfa; }
+
+/* Página de streaming genérica (sin marcas) */
+.stage { display: flex; gap: 0; height: 680px; padding: 0 40px 40px; }
+.player {
+  position: relative; flex: 1; border-radius: 12px 0 0 12px; overflow: hidden;
+  background: linear-gradient(180deg, #1d3557 0%, #274c77 45%, #6096ba 70%, #a3cef1 100%);
+}
+/* Escena de juego estilizada */
+.sun { position: absolute; right: 18%; top: 14%; width: 110px; height: 110px; border-radius: 50%;
+  background: radial-gradient(circle, #ffe8a3 0%, #ffb703 60%, rgba(255,183,3,0) 72%); }
+.mountain { position: absolute; bottom: 30%; width: 0; height: 0; border-style: solid; }
+.m1 { left: -5%; border-width: 0 260px 300px 260px; border-color: transparent transparent #3a5a40 transparent; }
+.m2 { left: 30%; border-width: 0 320px 360px 320px; border-color: transparent transparent #344e41 transparent; }
+.m3 { right: -8%; border-width: 0 240px 260px 240px; border-color: transparent transparent #588157 transparent; }
+.ground { position: absolute; left: 0; right: 0; bottom: 0; height: 32%;
+  background: linear-gradient(180deg, #588157, #3a5a40); }
+.hud { position: absolute; left: 20px; top: 16px; display: flex; gap: 10px; }
+.hud span { background: rgba(0,0,0,.55); border-radius: 6px; padding: 4px 10px; font-size: 14px; font-weight: 700; }
+.live { background: #e91916 !important; }
+.chat { width: 300px; background: #18181b; border-radius: 0 12px 12px 0; padding: 16px; font-size: 14px; line-height: 1.5; }
+.chat h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #adadb8; margin-bottom: 12px; }
+.chat p { margin-bottom: 10px; color: #dedee3; }
+.chat b { font-weight: 700; }
+.c1 { color: #ff7a59; } .c2 { color: #5ce1e6; } .c3 { color: #b9f18c; } .c4 { color: #f5a3ff; } .c5 { color: #ffd166; }

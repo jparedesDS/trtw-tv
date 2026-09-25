@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="common.css">
+  <!-- El CSS real del overlay de la extensión -->
+  <link rel="stylesheet" href="../../extension/content/overlay.css">
+</head>
+<body>
+  <div class="headline">
+    <img class="logo" src="logo.svg" alt="">
+    <div>
+      <h1 id="title"></h1>
+      <p id="subtitle"></p>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="player" id="player">
+      <div class="sun"></div>
+      <div class="mountain m1"></div><div class="mountain m2"></div><div class="mountain m3"></div>
+      <div class="ground"></div>
+      <div class="hud"><span class="live">EN DIRECTO</span><span>👁 12.408</span></div>
+    </div>
+    <div class="chat">
+      <h3>Chat</h3>
+      <p><b class="c1">pixel_mage</b>: gg that was insane</p>
+      <p><b class="c2">rustyfox</b>: clutch 🔥🔥</p>
+      <p><b class="c3">lina_plays</b>: nerf that weapon pls</p>
+      <p><b class="c4">notabot42</b>: KEKW</p>
+      <p><b class="c5">tomasito</b>: por fin entiendo todo 🙌</p>
+      <p><b class="c2">rustyfox</b>: last round lets gooo</p>
+    </div>
+  </div>
+  <script type="module">
+    import { SubtitleRenderer } from '../../extension/lib/subtitle-renderer.js';
+    const q = new URLSearchParams(location.search);
+    document.getElementById('title').innerHTML = q.get('title');
+    document.getElementById('subtitle').textContent = q.get('subtitle');
+    const r = new SubtitleRenderer(document);
+    r.mount(document.getElementById('player'));
+    r.applySettings({ fontSize: 34, textColor: '#FFFFFF', bgOpacity: 0.72, subtitlePosition: 'bottom',
+      bilingual: q.get('bilingual') === '1', showPartial: true });
+    for (const f of JSON.parse(q.get('finals') || '[]')) r.update({ kind: 'final', id: Math.random(), es: f[0], en: f[1] });
+    if (q.get('partialEs') || q.get('partialEn')) r.update({ kind: 'partial', es: q.get('partialEs'), en: q.get('partialEn') });
+    document.body.dataset.ready = '1';
+  </script>
+</body>
+</html>
