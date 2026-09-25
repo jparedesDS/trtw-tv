@@ -5,6 +5,7 @@ import * as ort from 'onnxruntime-web';
 import { AsrClient } from './asr-client.js';
 import { SileroVad } from './vad.js';
 import { Streamer } from './streamer.js';
+import { judgeSegment } from './hallucination-filter.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('pipeline');
@@ -55,6 +56,7 @@ export class Pipeline {
     this.streamer = new Streamer({
       vad: this.vad,
       asr: this.asr,
+      filter: (seg, ctx) => judgeSegment(seg, ctx),
       log,
       onPartial: (p) => this._partial(p),
       onCommit: (c) => this._commit(c),
