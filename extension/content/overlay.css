@@ -1,117 +1,79 @@
-/* trtw.tv — Netflix-quality subtitle overlay */
-/* All selectors prefixed with #trtw- to avoid conflicts */
-
-/* Inter font loaded via system fallback — external @import blocked by site CSP */
+/* trtw.tv — overlay de subtítulos. Todo con prefijo trtw- para no chocar con la web. */
 
 #trtw-subtitle-container {
+  --trtw-font-size: 26px;
+  --trtw-text-color: #ffffff;
+  --trtw-bg: rgba(0, 0, 0, 0.7);
   position: absolute;
-  bottom: 64px;
   left: 50%;
+  bottom: 9%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: min(90%, 1100px);
   z-index: 2147483647;
   pointer-events: none;
-  max-width: 85%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  gap: 6px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-#trtw-subtitle-text {
-  background: rgba(0, 0, 0, 0.78);
-  backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  color: var(--trtw-text-color, #FFFFFF);
-  font-size: var(--trtw-font-size, 20px);
-  font-weight: 500;
-  line-height: 1.45;
-  letter-spacing: 0.01em;
-  padding: 8px 20px;
+#trtw-subtitle-container.trtw-top {
+  bottom: auto;
+  top: 7%;
+}
+
+#trtw-subtitle-container .trtw-box {
+  background: var(--trtw-bg);
   border-radius: 8px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6),
-               0 0 1px rgba(0, 0, 0, 0.4);
+  padding: 4px 14px 6px;
   max-width: 100%;
   text-align: center;
-  word-wrap: break-word;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#trtw-subtitle-container .trtw-box.trtw-visible {
+  opacity: 1;
+}
+
+#trtw-subtitle-container .trtw-line {
+  line-height: 1.3;
   overflow-wrap: break-word;
-
-  /* Netflix-style animation */
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  text-shadow: 0 0 3px #000, 0 1px 3px #000;
 }
 
-#trtw-subtitle-text.trtw-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-#trtw-subtitle-text.trtw-fading {
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Language badge */
-#trtw-lang-badge {
-  position: absolute;
-  top: -24px;
-  right: 0;
-  background: rgba(124, 58, 237, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: #FFFFFF;
-  font-size: 10px;
+#trtw-subtitle-container .trtw-es {
+  font-size: var(--trtw-font-size);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 2px 8px;
-  border-radius: 4px;
+  color: var(--trtw-text-color);
+}
+
+#trtw-subtitle-container .trtw-en {
+  font-size: calc(var(--trtw-font-size) * 0.62);
+  font-weight: 500;
+  color: #d4d4d8;
+  margin-top: 2px;
+}
+
+#trtw-subtitle-container .trtw-partial {
+  color: #a1a1aa;
+  font-weight: 500;
+}
+
+#trtw-subtitle-container .trtw-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(124, 58, 237, 0.9);
+  border-radius: 999px;
+  padding: 3px 10px;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.25s ease;
+  white-space: nowrap;
 }
 
-#trtw-lang-badge.trtw-visible {
-  opacity: 1;
-}
-
-/* Status indicator */
-#trtw-status {
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22C55E;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-#trtw-status.trtw-active {
-  opacity: 1;
-  animation: trtw-pulse 2s ease-in-out infinite;
-}
-
-@keyframes trtw-pulse {
-  0%, 100% { box-shadow: 0 0 6px rgba(34, 197, 94, 0.6); }
-  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.9); }
-}
-
-/* Position variants */
-#trtw-subtitle-container.trtw-position-top {
-  bottom: auto;
-  top: 64px;
-}
-
-#trtw-subtitle-container.trtw-position-middle {
-  bottom: auto;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
+#trtw-subtitle-container .trtw-pill.trtw-visible { opacity: 1; }
+#trtw-subtitle-container .trtw-pill.trtw-error { background: rgba(220, 38, 38, 0.92); }

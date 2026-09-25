@@ -1,325 +1,157 @@
-// trtw.tv Content Script — Subtitle Overlay for Twitch & YouTube
-// Injects Netflix-quality subtitles over the video player
+// trtw.tv — Content script (Twitch y YouTube)
+//
+// - Pinta los subtítulos sobre el reproductor (también en pantalla completa y
+//   en el modo teatro de Twitch).
+// - Hace de relé para la Translator API de Chrome cuando el documento
+//   offscreen no la tiene disponible.
+//
+// Se compila con esbuild (formato IIFE) porque los content scripts no admiten
+// módulos ES.
 
+import { SubtitleRenderer } from '../lib/subtitle-renderer.js';
 import { createChromeTranslator } from '../lib/chrome-translator.js';
+import { loadSettings } from '../lib/settings.js';
 
-(() => {
-  'use strict';
+const PREFIX = '[trtw.tv][overlay]';
+const renderer = new SubtitleRenderer(document);
 
-  // ── Relé de traducción (Translator API de Chrome en la pestaña) ──
-  let translatorPromise = null;
-  function getTranslator() {
-    translatorPromise ??= createChromeTranslator().then((r) => {
-      if (!r.translator) translatorPromise = null; // reintentar más tarde
-      return r;
-    });
-    return translatorPromise;
+// ── Localizar el reproductor ────────────────────────────────────
+
+const PLAYER_SELECTORS = [
+  '.video-player__container',          // Twitch (normal, teatro y pantalla completa)
+  '[data-a-target="video-player"]',    // Twitch
+  '#movie_player',                     // YouTube
+  '.html5-video-player'                // YouTube
+];
+
+// El vídeo más grande visible (Twitch puede tener vídeos de anuncios/previews).
+function mainVideo() {
+  let best = null;
+  let bestArea = 0;
+  for (const v of document.querySelectorAll('video')) {
+    const r = v.getBoundingClientRect();
+    const area = r.width * r.height;
+    if (area > bestArea) { best = v; bestArea = area; }
   }
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type !== 'trtw-translate') return false;
-    getTranslator().then(async (r) => {
-      if (!r.translator) return sendResponse({ ok: false, availability: r.availability, error: r.error });
-      if (message.op === 'probe') return sendResponse({ ok: true });
-      try {
-        sendResponse({ ok: true, text: await r.translator.translate(message.text) });
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    });
-    return true;
+  return best;
+}
+
+function findPlayer() {
+  const video = mainVideo();
+  if (video) {
+    for (const sel of PLAYER_SELECTORS) {
+      const c = video.closest(sel);
+      if (c) return c;
+    }
+    return video.parentElement;
+  }
+  for (const sel of PLAYER_SELECTORS) {
+    const el = document.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
+}
+
+function attach() {
+  // En pantalla completa solo se ve el elemento a pantalla completa.
+  const fs = document.fullscreenElement;
+  let target = findPlayer();
+  if (fs && fs.tagName !== 'VIDEO' && (!target || !fs.contains(target))) target = fs;
+  if (!target) return;
+  if (target.tagName === 'VIDEO') target = target.parentElement;
+  if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
+  if (renderer.root.parentElement !== target) {
+    renderer.mount(target);
+    console.debug(PREFIX, 'overlay colocado en', target);
+  }
+}
+
+// SPA (cambio de canal, modo teatro…): recolocar si el reproductor cambia.
+// Throttle (no debounce): el chat de Twitch muta el DOM sin parar.
+let checkPending = false;
+new MutationObserver(() => {
+  if (checkPending) return;
+  checkPending = true;
+  setTimeout(() => {
+    checkPending = false;
+    const player = findPlayer();
+    if (!renderer.mounted || (player && !player.contains(renderer.root) && !document.fullscreenElement)) attach();
+  }, 500);
+}).observe(document.documentElement, { childList: true, subtree: true });
+
+document.addEventListener('fullscreenchange', () => setTimeout(attach, 50));
+
+// ── Ajustes ─────────────────────────────────────────────────────
+
+loadSettings().then((s) => renderer.applySettings(s));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local') loadSettings().then((s) => renderer.applySettings(s));
+});
+
+// ── Estado (avisos pequeños sobre el vídeo) ─────────────────────
+
+const DEVICE = { webgpu: 'WebGPU', wasm: 'WASM' };
+let lastState = null;
+
+function showStatus(status) {
+  const state = status?.state;
+  if (state === 'loading') {
+    const p = status.progress;
+    renderer.setStatus(p?.pct != null ? `trtw.tv · descargando modelo ${p.pct}%` : 'trtw.tv · cargando modelos…');
+  } else if (state === 'capturing' && lastState !== 'capturing') {
+    renderer.setStatus(`trtw.tv · subtítulos activados${status.device ? ' · ' + DEVICE[status.device] : ''}`, { timeout: 2500 });
+  } else if (state === 'error') {
+    renderer.setStatus(`trtw.tv · ${status.error || 'error'}`, { error: true, timeout: 8000 });
+  } else if (state === 'idle') {
+    renderer.setStatus(null);
+  }
+  lastState = state;
+}
+
+// ── Relé de traducción ──────────────────────────────────────────
+
+let translatorPromise = null;
+function getTranslator() {
+  translatorPromise ??= createChromeTranslator().then((r) => {
+    if (!r.translator) translatorPromise = null; // se reintentará
+    return r;
   });
+  return translatorPromise;
+}
 
-  // ── Site Detection ──────────────────────────────────────────
-
-  const SITES = {
-    twitch: {
-      host: 'twitch.tv',
-      selectors: [
-        '.video-player__container',
-        '[data-a-target="video-player"]',
-        '.video-player',
-        'video'
-      ]
-    },
-    youtube: {
-      host: 'youtube.com',
-      selectors: [
-        '#movie_player',
-        '.html5-video-player',
-        '#player-container',
-        'video'
-      ]
-    }
-  };
-
-  function detectSite() {
-    const host = window.location.hostname;
-    for (const [name, config] of Object.entries(SITES)) {
-      if (host.includes(config.host)) return { name, ...config };
-    }
-    return null;
+async function handleTranslate(message) {
+  const r = await getTranslator();
+  if (!r.translator) return { ok: false, availability: r.availability, error: r.error };
+  if (message.op === 'probe') return { ok: true };
+  try {
+    return { ok: true, text: await r.translator.translate(message.text) };
+  } catch (e) {
+    return { ok: false, error: e.message };
   }
+}
 
-  // ── Overlay Manager ─────────────────────────────────────────
+// ── Mensajes ────────────────────────────────────────────────────
 
-  let container = null;
-  let subtitleEl = null;
-  let langBadge = null;
-  let statusDot = null;
-  let fadeTimeout = null;
-  let langTimeout = null;
-  let observer = null;
-  let currentPlayerEl = null;
-
-  function createOverlay() {
-    if (container) return;
-
-    container = document.createElement('div');
-    container.id = 'trtw-subtitle-container';
-
-    subtitleEl = document.createElement('div');
-    subtitleEl.id = 'trtw-subtitle-text';
-
-    langBadge = document.createElement('div');
-    langBadge.id = 'trtw-lang-badge';
-
-    statusDot = document.createElement('div');
-    statusDot.id = 'trtw-status';
-
-    container.appendChild(statusDot);
-    container.appendChild(langBadge);
-    container.appendChild(subtitleEl);
-
-    return container;
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  switch (message?.type) {
+    case 'subtitle-update':
+      if (!renderer.mounted) attach();
+      renderer.update(message);
+      return false;
+    case 'status-update':
+      if (!renderer.mounted) attach();
+      showStatus(message.status);
+      return false;
+    case 'clear-subtitles':
+      renderer.clear();
+      renderer.setStatus(null);
+      lastState = 'idle';
+      return false;
+    case 'trtw-translate':
+      handleTranslate(message).then(sendResponse);
+      return true;
   }
+  return false;
+});
 
-  function findPlayerContainer(site) {
-    for (const selector of site.selectors) {
-      const el = document.querySelector(selector);
-      if (el) {
-        // If we found a <video> element, use its parent as container
-        if (el.tagName === 'VIDEO') {
-          return el.parentElement;
-        }
-        return el;
-      }
-    }
-    return null;
-  }
-
-  function attachOverlay(site) {
-    const playerEl = findPlayerContainer(site);
-    if (!playerEl || playerEl === currentPlayerEl) return;
-
-    // Remove from previous container if any
-    if (container && container.parentElement) {
-      container.parentElement.removeChild(container);
-    }
-
-    createOverlay();
-
-    // Ensure the player container has relative positioning
-    const playerPosition = getComputedStyle(playerEl).position;
-    if (playerPosition === 'static') {
-      playerEl.style.position = 'relative';
-    }
-
-    playerEl.appendChild(container);
-    currentPlayerEl = playerEl;
-
-    // Apply saved settings
-    applySettings();
-
-    console.log(`[trtw.tv] Overlay attached to ${site.name} player`);
-  }
-
-  function destroyOverlay() {
-    if (container && container.parentElement) {
-      container.parentElement.removeChild(container);
-    }
-    container = null;
-    subtitleEl = null;
-    langBadge = null;
-    statusDot = null;
-    currentPlayerEl = null;
-    clearTimeout(fadeTimeout);
-    clearTimeout(langTimeout);
-  }
-
-  // ── Subtitle Display ───────────────────────────────────────
-
-  let lastText = '';
-
-  function showSubtitle(text, language) {
-    if (!subtitleEl || !text) return;
-
-    // Deduplication: skip if same as last text
-    if (text === lastText) return;
-    lastText = text;
-
-    // Clear existing timeouts
-    clearTimeout(fadeTimeout);
-
-    // Update text
-    subtitleEl.textContent = text;
-
-    // Animate in
-    subtitleEl.classList.remove('trtw-fading');
-    // Force reflow for animation restart
-    void subtitleEl.offsetWidth;
-    subtitleEl.classList.add('trtw-visible');
-
-    // Show language badge briefly
-    if (language && language !== 'auto') {
-      showLanguageBadge(language);
-    }
-
-    // Show status dot
-    if (statusDot) {
-      statusDot.classList.add('trtw-active');
-    }
-
-    // Fade out after 5 seconds of no new subtitles
-    fadeTimeout = setTimeout(() => {
-      if (subtitleEl) {
-        subtitleEl.classList.remove('trtw-visible');
-        subtitleEl.classList.add('trtw-fading');
-      }
-    }, 5000);
-  }
-
-  function showLanguageBadge(lang) {
-    if (!langBadge) return;
-    clearTimeout(langTimeout);
-
-    langBadge.textContent = lang.toUpperCase();
-    langBadge.classList.add('trtw-visible');
-
-    langTimeout = setTimeout(() => {
-      langBadge.classList.remove('trtw-visible');
-    }, 3000);
-  }
-
-  function clearSubtitles() {
-    if (subtitleEl) {
-      subtitleEl.classList.remove('trtw-visible');
-      subtitleEl.classList.add('trtw-fading');
-    }
-    if (statusDot) {
-      statusDot.classList.remove('trtw-active');
-    }
-    lastText = '';
-  }
-
-  // ── Settings ────────────────────────────────────────────────
-
-  async function applySettings() {
-    if (!container) return;
-
-    const defaults = {
-      fontSize: 20,
-      textColor: '#FFFFFF',
-      bgOpacity: 0.78,
-      subtitlePosition: 'bottom'
-    };
-
-    try {
-      const settings = await chrome.storage.local.get(defaults);
-      container.style.setProperty('--trtw-font-size', settings.fontSize + 'px');
-      container.style.setProperty('--trtw-text-color', settings.textColor);
-
-      if (subtitleEl) {
-        subtitleEl.style.background = `rgba(0, 0, 0, ${settings.bgOpacity})`;
-      }
-
-      // Position
-      container.className = 'trtw-position-' + settings.subtitlePosition;
-      container.id = 'trtw-subtitle-container';
-    } catch {
-      // Use defaults from CSS
-    }
-  }
-
-  // Listen for settings changes
-  chrome.storage.onChanged.addListener((changes) => {
-    const relevant = ['fontSize', 'textColor', 'bgOpacity', 'subtitlePosition'];
-    if (relevant.some(key => key in changes)) {
-      applySettings();
-    }
-  });
-
-  // ── SPA Navigation Handling ─────────────────────────────────
-
-  let observerDebounce = null;
-
-  function setupObserver(site) {
-    if (observer) observer.disconnect();
-
-    observer = new MutationObserver(() => {
-      // Debounce to avoid excessive DOM queries on dynamic pages
-      clearTimeout(observerDebounce);
-      observerDebounce = setTimeout(() => {
-        const playerEl = findPlayerContainer(site);
-        if (playerEl && playerEl !== currentPlayerEl) {
-          attachOverlay(site);
-        }
-      }, 500);
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  // ── Message Listener ────────────────────────────────────────
-
-  chrome.runtime.onMessage.addListener((message) => {
-    switch (message.type) {
-      case 'subtitle-update':
-        if (message.kind !== 'partial') showSubtitle(message.es || message.en, 'es');
-        break;
-
-      case 'clear-subtitles':
-        clearSubtitles();
-        break;
-    }
-  });
-
-  // ── Fullscreen Handling ─────────────────────────────────────
-
-  document.addEventListener('fullscreenchange', () => {
-    const site = detectSite();
-    if (site) {
-      // Re-attach after a small delay to let the DOM settle
-      setTimeout(() => attachOverlay(site), 200);
-    }
-  });
-
-  // ── Init ────────────────────────────────────────────────────
-
-  function init() {
-    const site = detectSite();
-    if (!site) return;
-
-    console.log(`[trtw.tv] Content script loaded on ${site.name}`);
-
-    // Try to attach immediately
-    attachOverlay(site);
-
-    // Also set up observer for SPA navigation
-    setupObserver(site);
-
-    // Retry attachment after a delay (page might still be loading)
-    if (!currentPlayerEl) {
-      setTimeout(() => attachOverlay(site), 2000);
-    }
-  }
-
-  // Run when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
+attach();
