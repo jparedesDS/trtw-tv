@@ -64,7 +64,14 @@ async function start({ streamId, tabId, settings }) {
   teardownAudio();
   setStatus({ state: 'starting', tabId, error: null, recoverable: null, modelId: settings.modelId });
 
-  // 1) Modelos: reutilizamos el pipeline si el modelo/backend no han cambiado.
+  // 1) Audio de la pestaña, LO PRIMERO: el streamId caduca en pocos segundos.
+  const t0 = performance.now();
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } }
+  });
+  log.info(`Stream de la pestaña obtenido en ${Math.round(performance.now() - t0)} ms`);
+
+  // 2) Modelos: reutilizamos el pipeline si el modelo/backend no han cambiado.
   if (pipeline && !pipeline.isCompatible(settings)) {
     log.info('Cambió el modelo o el backend: recargando');
     pipeline.dispose();
@@ -85,12 +92,7 @@ async function start({ streamId, tabId, settings }) {
     pipeline.updateSettings(settings);
   }
 
-  // 2) Audio de la pestaña
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } }
-  });
-
-  // AudioContext a la frecuencia nativa: el usuario lo sigue oyendo con calidad
+  // 3) AudioContext a la frecuencia nativa: el usuario lo sigue oyendo con calidad
   // completa; el worklet ya se encarga de bajar a 16 kHz para el ASR.
   audioContext = new AudioContext({ latencyHint: 'playback' });
   await audioContext.audioWorklet.addModule(chrome.runtime.getURL('audio/capture-worklet.js'));
@@ -116,7 +118,7 @@ async function start({ streamId, tabId, settings }) {
 
   log.info(`Captura iniciada (AudioContext a ${audioContext.sampleRate} Hz)`);
 
-  // 3) Carga de modelos en segundo plano (el progreso llega por onStatus).
+  // 4) Carga de modelos en segundo plano (el progreso llega por onStatus).
   //    No se espera aquí: el service worker solo aguarda a que la captura arranque.
   const p = pipeline;
   if (!p.ready) {

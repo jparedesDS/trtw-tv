@@ -117,39 +117,52 @@ async function startCapture(tabId) {
   // Ya capturando esta pestaña → nada que hacer.
   if (active && status.tabId === tabId) return { success: true, status };
 
-  // 1) El streamId primero: si Chrome no deja capturar (falta el gesto del
-  //    usuario, página no permitida…), no tocamos nada de lo que ya funciona.
-  let streamId;
+  // 1) Offscreen listo ANTES de pedir el streamId: los ids de tabCapture
+  //    caducan en pocos segundos y crear el offscreen la primera vez (cargar
+  //    su código) puede tardar lo suficiente como para invalidarlo.
+  //    Solo se cierra si está roto (no responde o su error no es recuperable).
+  if (status.state === 'error' && (status.unresponsive || !status.recoverable)) {
+    log.info('Reset desde estado de error:', status.error);
+    await closeOffscreen();
+  }
+  let settings;
   try {
-    streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    await ensureOffscreen();
+    settings = await loadSettings();
   } catch (e) {
-    log.warn('tabCapture:', e.message);
+    log.error('No se pudo crear el offscreen:', e.message);
     return { success: false, error: friendlyError(e.message) };
   }
 
   // 2) Si se estaba capturando otra pestaña, la paramos (los modelos se quedan).
   if (active) await stopCapture({ keepOffscreen: true });
 
-  // 3) Reset completo solo si el offscreen está roto: no responde o su error
-  //    no es recuperable. Un fallo de captura conserva los modelos cargados.
-  if (status.state === 'error' && (status.unresponsive || !status.recoverable)) {
-    log.info('Reset desde estado de error:', status.error);
-    await closeOffscreen();
-  }
-
+  // 3) streamId recién pedido → al offscreen inmediatamente. Si Chrome no logra
+  //    arrancar la captura con él, se reintenta una vez con uno nuevo.
   setBadge('starting');
   let resp;
-  try {
-    await ensureOffscreen();
-    const settings = await loadSettings();
-    resp = await sendToOffscreen({ type: 'start', streamId, tabId, settings }, 15000);
-  } catch (e) {
-    // Sin respuesta: el offscreen está roto → el siguiente intento empieza de cero.
-    log.error('El offscreen no arrancó:', e.message);
-    await closeOffscreen();
-    await chrome.storage.session.remove('activeTabId');
-    setBadge('error');
-    return { success: false, error: friendlyError(e.message) };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let streamId;
+    try {
+      streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    } catch (e) {
+      log.warn('tabCapture:', e.message);
+      setBadge((await getStatus()).state);
+      return { success: false, error: friendlyError(e.message) };
+    }
+    try {
+      resp = await sendToOffscreen({ type: 'start', streamId, tabId, settings }, 15000);
+    } catch (e) {
+      // Sin respuesta: el offscreen está roto → el siguiente intento empieza de cero.
+      log.error('El offscreen no arrancó:', e.message);
+      await closeOffscreen();
+      await chrome.storage.session.remove('activeTabId');
+      setBadge('error');
+      return { success: false, error: friendlyError(e.message) };
+    }
+    if (resp?.success || attempt === 2 || !/tab capture|captur/i.test(resp?.error || '')) break;
+    log.warn(`La captura falló (${resp.error}); reintentando con un streamId nuevo`);
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   if (!resp?.success) {
@@ -196,6 +209,9 @@ async function stopCapture({ keepOffscreen = true } = {}) {
 
 function friendlyError(msg = '') {
   if (/active stream/i.test(msg)) return 'La pestaña ya se está capturando. Pulsa Stop y vuelve a intentarlo.';
+  if (/error starting tab capture/i.test(msg)) {
+    return 'Chrome no pudo capturar el audio de la pestaña. Vuelve a pulsar Start; si se repite, recarga la pestaña (F5) y comprueba que no se esté compartiendo o grabando con otra extensión.';
+  }
   if (/invoked|activeTab|permission/i.test(msg)) return 'Chrome no permite capturar esta pestaña. Abre el popup desde la pestaña de Twitch/YouTube y pulsa Start.';
   if (/chrome:\/\//i.test(msg)) return 'No se pueden capturar páginas internas de Chrome.';
   return msg;
