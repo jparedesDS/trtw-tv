@@ -157,6 +157,9 @@ function bindSettings() {
   $('glossary').oninput = (e) => save({ glossary: e.target.value }, { debounce: true });
   $('glossary').onblur = flush;
 
+  $('mode-select').value = settings.subtitleMode;
+  $('mode-select').onchange = (e) => save({ subtitleMode: e.target.value });
+
   $('bilingual-toggle').checked = settings.bilingual;
   $('bilingual-toggle').onchange = (e) => save({ bilingual: e.target.checked });
 

@@ -51,7 +51,7 @@ $('engine').value = settings.translationEngine;
 $('bilingual').checked = settings.bilingual;
 $('partial').checked = settings.showPartial;
 $('context').checked = settings.translateWithContext;
-$('st-coi').textContent = self.crossOriginIsolated ? 'sí (WASM multihilo)' : 'no (WASM 1 hilo)';
+$('st-coi').textContent = self.crossOriginIsolated ? 'WASM multihilo' : 'WASM de 1 hilo';
 
 function currentSettings() {
   return {

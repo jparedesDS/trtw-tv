@@ -7,7 +7,7 @@ reproductor, con 1,5–3 s de retraso.
 - **100 % gratis y local**: sin APIs de pago, sin claves y sin servidor. Lo único
   que se descarga de Internet son los modelos (de Hugging Face, solo la primera vez).
 - **No necesita una gráfica NVIDIA**: usa **WebGPU** (vale la gráfica integrada
-  Intel/AMD/Apple) y, si no hay, **WASM** (CPU, multihilo).
+  Intel/AMD/Apple) y, si no hay, **WASM** (CPU).
 - **Frases completas y sin texto inventado** antes que velocidad: detector de voz
   Silero VAD, confirmación por *local agreement* y filtro anti-alucinaciones.
 
@@ -33,7 +33,7 @@ extensión sobre una escena de ejemplo (<code>node store/render.mjs</code>).</su
 |---|---|
 | Navegador | **Chrome 138 o superior** (por la Translator API integrada). |
 | Para compilar | **Node.js 22 LTS** (mínimo 21: `npm test` usa patrones glob de `node --test`) y npm. |
-| Hardware | Cualquier equipo reciente. Con WebGPU va holgado; en CPU usa `tiny.en` o `base.en`. |
+| Hardware | Cualquier equipo reciente. Con WebGPU va holgado; sin WebGPU la CPU trabaja con un solo hilo, así que usa `tiny.en`. |
 
 ## Instalación
 
@@ -95,6 +95,9 @@ Opciones:
 - **Contexto**: se traduce junto a la frase anterior para mejorar la concordancia.
 - **Glosario**: términos que no se traducen (gg, clutch, nerf, nombres propios,
   emotes…), uno por línea. `término = traducción` fuerza una traducción concreta.
+- **Estilo**: *Frase a frase* (por defecto, como en las plataformas de vídeo:
+  cada frase sustituye a la anterior, se mantiene lo necesario para leerla y
+  las largas se dividen en páginas) o *Continuo* (las frases se van acumulando).
 - **Bilingüe**: muestra el inglés original debajo del español.
 - **Texto provisional**: la hipótesis aún no confirmada, en gris.
 
@@ -137,6 +140,7 @@ Popup → **Página de test** (o `chrome-extension://<id>/test/test.html`).
 | Los subtítulos salen en inglés | No hay traductor disponible. Mira el motor en el popup; prueba **Opus-MT**. El estado del modelo de Chrome está en `chrome://on-device-translation-internals`. |
 | Mucho retraso | Usa WebGPU o un modelo más pequeño (`tiny.en`). En la página de test, un RTF > 0,5 indica que el equipo va justo. |
 | Texto inventado con música | El filtro descarta lo típico; lo que se cuele aparece en la página de test con el motivo. |
+| *"Chrome no pudo capturar el audio de la pestaña"* (Error starting tab capture) | Recarga la extensión (↻) y la pestaña (F5). Si persiste, comprueba en `chrome://policy` que no haya una política que bloquee la captura y que ninguna otra extensión esté grabando la pestaña. |
 | No oigo el stream tras Start | La captura silencia la pestaña y la extensión reproduce el audio; comprueba el volumen del sistema o haz Stop/Start. |
 
 **Logs**: `chrome://extensions` → trtw.tv → *Inspeccionar vistas*

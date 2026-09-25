@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   glossary: DEFAULT_GLOSSARY,
 
   // Overlay
+  subtitleMode: 'phrase',       // 'phrase' (frase a frase) | 'rolling' (continuo)
   bilingual: false,             // muestra el inglés original debajo
   showPartial: true,            // hipótesis parcial en gris
   fontSize: 26,

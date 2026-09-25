@@ -34,7 +34,7 @@ popup ──(start/stop/get-state)──▶ service-worker ──▶ offscreen d
 |---|---|
 | `package.json` | scripts `build`/`watch`/`test`/`package`; `prepare` compila tras `npm install`. |
 | `scripts/build.mjs` | **nuevo**. esbuild (offscreen, worker ASR, content script, test) + copia de `ort-wasm-simd-threaded.jsep.{mjs,wasm}` a `extension/vendor/ort/`. |
-| `extension/manifest.json` | Chrome 138+, COOP/COEP (WASM multihilo), content script compilado, sin fuentes externas. |
+| `extension/manifest.json` | Chrome 138+, content script compilado, sin fuentes externas. Sin COOP/COEP: el aislamiento impide consumir el streamId de tabCapture en el offscreen. |
 | `extension/service-worker.js` | Reescrito: sin estado en memoria, cola de operaciones, reset desde error, relé de mensajes, badge. |
 | `extension/offscreen/offscreen.{html,js}` | Reescrito: captura + `Pipeline`, estado y errores no fatales. |
 | `extension/audio/capture-worklet.js` | **nuevo** (sustituye `utils/audio-processor.js`): downmix + remuestreo con filtro paso bajo a 16 kHz, tramas de 512. |
