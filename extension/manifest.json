@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "trtw.tv — Live Subtitles",
-  "version": "0.1.0",
-  "description": "Real-time automatic subtitles for Twitch and YouTube streams. Powered by Whisper AI.",
-  "minimum_chrome_version": "121",
+  "name": "trtw.tv — Subtítulos en español",
+  "version": "2.0.0",
+  "description": "Subtítulos en español en directo para Twitch y YouTube. Whisper + traducción 100 % locales y gratis.",
+  "minimum_chrome_version": "138",
 
   "permissions": [
     "tabCapture",
@@ -37,7 +37,7 @@
         "*://*.twitch.tv/*",
         "*://*.youtube.com/*"
       ],
-      "js": ["content/overlay.js"],
+      "js": ["dist/overlay.js"],
       "css": ["content/overlay.css"],
       "run_at": "document_idle"
     }
@@ -49,13 +49,16 @@
         "default": "Alt+S",
         "mac": "Alt+S"
       },
-      "description": "Toggle subtitles on/off"
+      "description": "Activar / desactivar subtítulos"
     }
   },
 
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
+
+  "cross_origin_embedder_policy": { "value": "require-corp" },
+  "cross_origin_opener_policy": { "value": "same-origin" },
 
   "icons": {
     "16": "icons/icon16.png",

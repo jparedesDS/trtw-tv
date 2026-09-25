@@ -199,7 +199,7 @@
     };
 
     try {
-      const settings = await chrome.storage.sync.get(defaults);
+      const settings = await chrome.storage.local.get(defaults);
       container.style.setProperty('--trtw-font-size', settings.fontSize + 'px');
       container.style.setProperty('--trtw-text-color', settings.textColor);
 
@@ -252,7 +252,7 @@
   chrome.runtime.onMessage.addListener((message) => {
     switch (message.type) {
       case 'subtitle-update':
-        showSubtitle(message.text, message.language);
+        if (message.kind !== 'partial') showSubtitle(message.es || message.en, 'es');
         break;
 
       case 'clear-subtitles':

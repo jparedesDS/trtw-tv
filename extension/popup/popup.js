@@ -9,9 +9,7 @@ const DEFAULT_SETTINGS = {
   fontSize: 20,
   textColor: '#FFFFFF',
   bgOpacity: 0.78,
-  subtitlePosition: 'bottom',
-  useCloudApi: false,
-  cloudApiKey: ''
+  subtitlePosition: 'bottom'
 };
 
 let settings = { ...DEFAULT_SETTINGS };
@@ -42,16 +40,13 @@ function initElements() {
   els.bgOpacityValue = document.getElementById('bg-opacity-value');
   els.colorOptions = document.getElementById('color-options');
   els.positionSelect = document.getElementById('position-select');
-  els.cloudToggle = document.getElementById('cloud-toggle');
-  els.apiKeyGroup = document.getElementById('api-key-group');
-  els.apiKey = document.getElementById('api-key');
 }
 
 // ── Settings Load/Save ──────────────────────────────────────
 
 async function loadSettings() {
   try {
-    const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+    const stored = await chrome.storage.local.get(DEFAULT_SETTINGS);
     settings = { ...DEFAULT_SETTINGS, ...stored };
   } catch {
     settings = { ...DEFAULT_SETTINGS };
@@ -68,23 +63,18 @@ async function loadSettings() {
   els.bgOpacity.value = Math.round(settings.bgOpacity * 100);
   els.bgOpacityValue.textContent = Math.round(settings.bgOpacity * 100) + '%';
   els.positionSelect.value = settings.subtitlePosition;
-  els.cloudToggle.checked = settings.useCloudApi;
-  els.apiKey.value = settings.cloudApiKey;
 
   // Color buttons
   els.colorOptions.querySelectorAll('.color-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.color === settings.textColor);
   });
-
-  // API key visibility
-  els.apiKeyGroup.classList.toggle('hidden', !settings.useCloudApi);
 }
 
 function saveSettings() {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
     try {
-      await chrome.storage.sync.set(settings);
+      await chrome.storage.local.set(settings);
     } catch (e) {
       console.error('[trtw.tv] Failed to save settings:', e);
     }
@@ -107,7 +97,8 @@ async function queryState() {
 function updateUI(state) {
   const states = {
     idle: { badge: 'status-idle', text: 'Idle', label: 'Start Subtitles', active: false },
-    starting: { badge: 'status-loading', text: 'Starting...', label: 'Starting...', active: false },
+    starting: { badge: 'status-loading', text: 'Starting...', label: 'Stop Subtitles', active: true },
+    loading: { badge: 'status-loading', text: 'Loading model...', label: 'Stop Subtitles', active: true },
     capturing: { badge: 'status-capturing', text: 'Capturing', label: 'Stop Subtitles', active: true },
     stopping: { badge: 'status-loading', text: 'Stopping...', label: 'Stopping...', active: false },
     error: { badge: 'status-error', text: 'Error', label: 'Retry', active: false }
@@ -132,15 +123,15 @@ function setupListeners() {
 
     if (isCapturing) {
       updateUI('stopping');
-      const result = await chrome.runtime.sendMessage({ type: 'stop-capture' });
-      updateUI(result.success ? 'idle' : 'error');
+      await chrome.runtime.sendMessage({ type: 'stop-capture' });
+      updateUI('idle');
     } else {
       updateUI('starting');
       const result = await chrome.runtime.sendMessage({
         type: 'start-capture',
         tabId: tab.id
       });
-      updateUI(result.success ? 'capturing' : 'error');
+      updateUI(result.success ? (result.status?.state || 'loading') : 'error');
     }
   });
 
@@ -200,25 +191,12 @@ function setupListeners() {
   els.positionSelect.addEventListener('change', () => {
     settings.subtitlePosition = els.positionSelect.value;
     saveSettings();
-  });
-
-  // Cloud API toggle
-  els.cloudToggle.addEventListener('change', () => {
-    settings.useCloudApi = els.cloudToggle.checked;
-    els.apiKeyGroup.classList.toggle('hidden', !settings.useCloudApi);
-    saveSettings();
-  });
-
-  // API key input
-  els.apiKey.addEventListener('input', () => {
-    settings.cloudApiKey = els.apiKey.value;
-    saveSettings();
-  });
-}
+  });}
 
 // ── Model Progress Listener ─────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'status') updateUI(message.status.state);
   if (message.type !== 'model-progress') return;
 
   if (message.status === 'loading') {

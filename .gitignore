@@ -1,4 +1,8 @@
 node_modules/
+# Salida del build (npm run build)
+extension/dist/
+extension/vendor/
+# Restos de la v1
 extension/offscreen/offscreen.bundle.js
 *.zip
 .claude/
