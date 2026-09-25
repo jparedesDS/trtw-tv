@@ -49,7 +49,16 @@ export class Pipeline {
     return s.modelId === this.settings.modelId && s.device === this.settings.device;
   }
 
-  async load() {
+  // Idempotente: si ya se está cargando, devuelve la misma promesa.
+  load() {
+    this.loading ??= this._load().catch((e) => {
+      this.loading = null;
+      throw e;
+    });
+    return this.loading;
+  }
+
+  async _load() {
     // ORT del hilo principal: solo para el VAD (diminuto) → 1 hilo, WASM local.
     ort.env.wasm.wasmPaths = this.baseUrl + 'vendor/ort/';
     ort.env.wasm.numThreads = 1;
@@ -175,7 +184,7 @@ export class Pipeline {
       }
       const latencyMs = Math.round(c.latencyMs + (performance.now() - t0));
       this.latencyMs = this.latencyMs == null ? latencyMs : this.latencyMs * 0.7 + latencyMs * 0.3;
-      this.onDebug({ type: 'translation', id, en: c.text, es, latencyMs });
+      this.onDebug({ type: 'translation', id, en: c.text, es, latencyMs, commit: c });
       this.onSubtitle({ kind: 'final', id, en: c.text, es, latencyMs });
     });
   }
@@ -190,6 +199,7 @@ export class Pipeline {
 
   dispose() {
     this.ready = false;
+    this.disposed = true;
     this.streamer?.reset();
     this.translator.dispose();
     this.asr.terminate();

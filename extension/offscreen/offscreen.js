@@ -37,6 +37,9 @@ function fail(error) {
   const message = error?.message || String(error);
   log.error('Error fatal:', message);
   teardownAudio();
+  // El siguiente Start empezará con un pipeline nuevo.
+  pipeline?.dispose();
+  pipeline = null;
   setStatus({ state: 'error', error: message });
 }
 
@@ -97,15 +100,17 @@ async function start({ streamId, tabId, settings }) {
   log.info(`Captura iniciada (AudioContext a ${audioContext.sampleRate} Hz)`);
 
   // 3) Carga de modelos en segundo plano (el progreso llega por onStatus).
-  if (!pipeline.ready) {
+  //    No se espera aquí: el service worker solo aguarda a que la captura arranque.
+  const p = pipeline;
+  if (!p.ready) {
     setStatus({ state: 'loading' });
-    pipeline.load().then(
-      () => { if (status.state === 'loading') setStatus({ state: 'capturing', progress: null }); },
-      (e) => fail(e)
+    p.load().then(
+      () => { if (pipeline === p && status.state === 'loading') setStatus({ state: 'capturing', progress: null }); },
+      (e) => { if (pipeline === p) fail(e); }
     );
   } else {
-    await pipeline.prepareForTab();
     setStatus({ state: 'capturing' });
+    p.prepareForTab().catch((e) => log.warn('Traductor:', e.message));
   }
 }
 

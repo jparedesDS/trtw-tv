@@ -58,7 +58,15 @@ export class TranslationService {
     let warning = null;
 
     if (preference !== 'opus') {
-      const engine = (await this._tryChromeHere()) || (await this._tryChromeTab());
+      let engine = (await this._tryChromeHere()) || (await this._tryChromeTab());
+      // Si Chrome está descargando su modelo (lo inicia el clic en Start del
+      // popup), esperamos un poco antes de recurrir a Opus-MT.
+      for (let i = 0; !engine && this.downloading && i < 30; i++) {
+        if (i === 0) this.log.info('Chrome está descargando su modelo de traducción; esperando…');
+        this.onProgress({ stage: 'chrome', pct: null });
+        await new Promise((r) => setTimeout(r, 2000));
+        engine = (await this._tryChromeHere()) || (await this._tryChromeTab());
+      }
       if (engine) {
         this._setEngine(engine);
         return { engine: engine.name, warning };
@@ -91,8 +99,14 @@ export class TranslationService {
     this.log.info('Motor de traducción:', engine.name);
   }
 
+  // ¿Alguno de los dos contextos informa de una descarga en curso?
+  get downloading() {
+    return this.availabilityHere === 'downloading' || this.availabilityTab === 'downloading';
+  }
+
   async _tryChromeHere() {
-    const r = await createChromeTranslator({ onProgress: (pct) => this.onProgress({ stage: 'chrome', pct }) });
+    const r = await createChromeTranslator();
+    this.availabilityHere = r.availability;
     if (!r.translator) {
       this.log.info(`Translator API aquí: ${r.availability}${r.error ? ' — ' + r.error : ''}`);
       return null;
@@ -104,6 +118,7 @@ export class TranslationService {
     if (!this.relay) return null;
     try {
       const r = await withTimeout(this.relay('probe'), TIMEOUT_MS, 'relé');
+      this.availabilityTab = r?.availability;
       if (!r?.ok) {
         this.log.info(`Translator API en la pestaña: ${r?.availability || r?.error || 'no'}`);
         return null;

@@ -23,3 +23,32 @@ test('Silero VAD: silencio y ruido suave dan probabilidad baja', { skip: !ort &&
   vad.reset();
   await assert.rejects(() => vad.process(new Float32Array(100)));
 });
+
+// jfk.wav: fragmento del discurso inaugural de J. F. Kennedy (1961, dominio
+// público), 16 kHz mono, el mismo que usa whisper.cpp como ejemplo.
+async function readWav16k(path) {
+  const buf = await readFile(new URL(path, import.meta.url));
+  const dataOff = buf.indexOf('data') + 8;
+  const n = (buf.length - dataOff) >> 1;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = buf.readInt16LE(dataOff + i * 2) / 32768;
+  return out;
+}
+
+test('Silero VAD detecta la voz del ejemplo de JFK y los silencios entre frases', { skip: !ort && 'onnxruntime-node no disponible' }, async () => {
+  const model = await readFile(new URL('../extension/models/silero/silero_vad_v5.onnx', import.meta.url));
+  const vad = await SileroVad.create(ort, model, ['cpu']);
+  const audio = await readWav16k('./fixtures/jfk.wav');
+  const probs = [];
+  for (let i = 0; i + 512 <= audio.length; i += 512) probs.push(await vad.process(audio.subarray(i, i + 512)));
+  const speech = probs.filter((p) => p >= 0.5).length / probs.length;
+  // ~11 s de audio con pausas: la mayoría es voz, pero no todo.
+  assert.ok(speech > 0.4 && speech < 0.95, `fracción de voz ${speech.toFixed(2)}`);
+  // Hay al menos una pausa (≥ 300 ms seguidos sin voz) en mitad del discurso.
+  let run = 0, pauses = 0;
+  for (const p of probs.slice(20, -20)) {
+    run = p < 0.35 ? run + 1 : 0;
+    if (run === 10) pauses++;
+  }
+  assert.ok(pauses >= 1, 'sin pausas detectadas');
+});

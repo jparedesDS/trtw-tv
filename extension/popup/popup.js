@@ -54,7 +54,7 @@ function renderProgress(p) {
   const what = p.stage === 'mt' ? 'traductor' : p.stage === 'chrome' ? 'traductor de Chrome' : 'modelo de voz';
   const mb = p.total ? ` (${Math.round(p.loaded / 1e6)}/${Math.round(p.total / 1e6)} MB)` : '';
   $('progress-label').textContent = `Descargando ${what}${mb}…`;
-  $('progress-percent').textContent = (p.pct ?? 0) + '%';
+  $('progress-percent').textContent = p.pct == null ? '' : p.pct + '%';
   $('progress-fill').style.width = (p.pct ?? 0) + '%';
 }
 

@@ -146,8 +146,13 @@ async function loadAsr({ modelId, device: preference = 'auto' }) {
   attempts.push({ device: 'wasm', dtype: 'fp32' }); // último recurso
 
   const onProgress = progressTracker('asr');
-  const tokenizer = await AutoTokenizer.from_pretrained(modelId, { progress_callback: onProgress });
-  const processor = await AutoProcessor.from_pretrained(modelId, { progress_callback: onProgress });
+  let tokenizer, processor;
+  try {
+    tokenizer = await AutoTokenizer.from_pretrained(modelId, { progress_callback: onProgress });
+    processor = await AutoProcessor.from_pretrained(modelId, { progress_callback: onProgress });
+  } catch (e) {
+    throw new Error(downloadError(modelId, e));
+  }
 
   let lastError = null;
   for (const a of attempts) {
@@ -174,6 +179,14 @@ async function loadAsr({ modelId, device: preference = 'auto' }) {
     }
   }
   throw new Error(`No se pudo cargar ${modelId}: ${lastError?.message || lastError}`);
+}
+
+function downloadError(modelId, e) {
+  const msg = e?.message || String(e);
+  if (/fetch|network|Load failed/i.test(msg)) {
+    return `No se pudo descargar ${modelId} de Hugging Face (${msg}). Hace falta conexión la primera vez; después queda en caché.`;
+  }
+  return `No se pudo cargar ${modelId}: ${msg}`;
 }
 
 function tokenIds(tokenizer, gc) {
@@ -255,11 +268,16 @@ async function disposeAsr() {
 async function loadMt({ modelId = 'Xenova/opus-mt-en-es' } = {}) {
   if (mt?.modelId === modelId) return { modelId };
   log('info', 'Cargando traductor', modelId);
-  const translator = await pipeline('translation', modelId, {
-    device: 'wasm',
-    dtype: 'q8',
-    progress_callback: progressTracker('mt')
-  });
+  let translator;
+  try {
+    translator = await pipeline('translation', modelId, {
+      device: 'wasm',
+      dtype: 'q8',
+      progress_callback: progressTracker('mt')
+    });
+  } catch (e) {
+    throw new Error(downloadError(modelId, e));
+  }
   mt = { modelId, translator };
   return { modelId };
 }

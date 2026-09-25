@@ -45,6 +45,7 @@ popup ──(start/stop/get-state)──▶ service-worker ──▶ offscreen d
 | `extension/lib/hallucination-filter.js` | **nuevo**. Limpieza, frases típicas, repeticiones, no_speech/avg_logprob, ratio de voz. |
 | `extension/lib/glossary.js` | **nuevo**. Parseo del glosario y protección con marcadores. |
 | `extension/lib/translator.js` | **nuevo**. Motores: Chrome Translator, relé a la pestaña, Opus-MT. Contexto y caché. |
+| `extension/lib/chrome-translator.js` | **nuevo**. Envoltorio de la Translator API con timeouts (sin gesto del usuario, `create()` puede colgarse). |
 | `extension/lib/asr-client.js` | **nuevo**. Cliente con promesas para el worker. |
 | `extension/lib/pipeline.js` | **nuevo**. Une VAD + Streamer + ASR + traducción; lo usan offscreen y la página de test. |
 | `extension/lib/settings.js`, `log.js` | **nuevos**. Ajustes por defecto y logs con prefijo `[trtw.tv]`. |
@@ -53,6 +54,7 @@ popup ──(start/stop/get-state)──▶ service-worker ──▶ offscreen d
 | `extension/content/overlay.{js,css}` | Reescrito: usa el renderer, pantalla completa/modo teatro, relé de traducción. |
 | `extension/popup/*` | Reescrito en español: modelo, backend, motor, glosario, bilingüe; sin OpenAI. |
 | `extension/test/test.{html,js,css}` | **nuevo**. Página de test con audio local. |
+| `extension/test/samples/jfk.mp3`, `test/fixtures/jfk.wav` | Ejemplo de dominio público (discurso de J. F. Kennedy, 1961), el mismo que usa whisper.cpp. |
 | `extension/utils/*` | **eliminado** (OpenAI, MyMemory, trozos fijos de 3 s). |
 | `test/*.test.mjs` | **nuevos**. Tests unitarios con `node --test`. |
 | `README.md` | **nuevo**, en español. |
