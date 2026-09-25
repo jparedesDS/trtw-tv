@@ -2,11 +2,12 @@
 //
 // Dos estilos (ajuste `subtitleMode`):
 //
-//  - 'phrase' (por defecto, como en las plataformas de vídeo): cada frase
-//    nueva SUSTITUYE a la anterior. Se mantiene en pantalla lo necesario para
-//    leerla y, si no cabe en 2 líneas, se divide en "páginas" que se muestran
-//    una tras otra. El texto provisional (gris) aparece solo cuando ya ha dado
-//    tiempo a leer la frase, y nunca pegado a ella.
+//  - 'phrase' (por defecto, como en las plataformas de vídeo): se muestra una
+//    frase cada vez, el tiempo necesario para leerla; si no cabe en 2 líneas,
+//    se divide en "páginas". Las frases que llegan mientras tanto esperan en
+//    cola (nunca se salta ninguna) y, si se acumulan, se muestran algo más
+//    rápido para no quedarse atrás. El texto provisional (gris) aparece solo
+//    cuando no queda nada confirmado por mostrar, y nunca pegado a una frase.
 //
 //  - 'rolling' (continuo): las frases se van acumulando y la más antigua sale
 //    por arriba; el provisional va detrás, en gris.
@@ -23,9 +24,17 @@ const KEEP_FINALS = 4;
 const EMPTY_PARTIAL_GRACE_MS = 1500;
 
 // Tiempo de lectura de un texto: ~20 caracteres por segundo, entre 1,2 y 5 s.
-// (En directo no puede ser mucho más: una frase nueva siempre sustituye a la actual.)
 export function readingMs(text) {
   return Math.min(5000, Math.max(1200, String(text || '').length * 50));
+}
+
+// Tiempo que se muestra una página según cuántas frases esperan detrás:
+// con cola se acelera para no acumular retraso respecto al directo.
+export function dwellMs(text, waiting) {
+  const base = readingMs(text);
+  if (waiting >= 3) return 800;
+  if (waiting >= 1) return Math.max(1000, Math.round(base * 0.7));
+  return base;
 }
 
 export class SubtitleRenderer {
@@ -34,6 +43,7 @@ export class SubtitleRenderer {
     this.now = now || (() => Date.now());
     this.finals = [];     // [{ id, es, en }] (modo continuo)
     this.current = null;  // frase en pantalla (modo frase): { es, en, pages, page, pageShownAt }
+    this.pending = [];    // frases confirmadas esperando su turno (modo frase)
     this.partial = null;  // { es, en }
     this.settings = { bilingual: false, showPartial: true, subtitleMode: 'phrase' };
 
@@ -89,9 +99,11 @@ export class SubtitleRenderer {
       const f = { id: msg.id, es: msg.es || msg.en, en: msg.en };
       this.finals.push(f);
       if (this.finals.length > KEEP_FINALS) this.finals.shift();
-      // La frase confirmada sustituye a lo que hubiera (incluido el provisional:
-      // enseguida llegará el siguiente).
-      this.current = { ...f, pages: null, page: 0, pageShownAt: this.now(), retired: false };
+      // Se muestra ya si no hay nada pendiente de leer; si no, espera su turno.
+      const item = { ...f, pages: null, page: 0, pageShownAt: this.now(), retired: false };
+      if (this._currentDone(this.now())) this.current = item;
+      else this.pending.push(item);
+      // El provisional correspondía a esta frase: el siguiente llegará enseguida.
       this.partial = null;
       clearTimeout(this.partialClearTimer);
     } else if (msg.en) {
@@ -106,12 +118,14 @@ export class SubtitleRenderer {
       return;
     }
     this.render();
-    this._armHide();
+    // En modo frase el ocultado lo programa render() teniendo en cuenta la cola.
+    if (!this.phraseMode) this._armHide();
   }
 
   clear() {
     this.finals = [];
     this.current = null;
+    this.pending = [];
     this.partial = null;
     clearTimeout(this.hideTimer);
     clearTimeout(this.tickTimer);
@@ -133,6 +147,7 @@ export class SubtitleRenderer {
     this.hideTimer = setTimeout(() => {
       this.finals = [];
       this.current = null;
+      this.pending = [];
       this.partial = null;
       this.render();
     }, ms);
@@ -143,6 +158,16 @@ export class SubtitleRenderer {
       this.current.pages = null;
       this.current.page = 0;
     }
+    for (const p of this.pending) p.pages = null;
+  }
+
+  // ¿La frase actual ya se ha leído entera (o no hay ninguna)?
+  _currentDone(now) {
+    const cur = this.current;
+    if (!cur || cur.retired) return true;
+    if (!cur.pages) return false; // aún ni se ha pintado
+    if (cur.page < cur.pages.length - 1) return false;
+    return now - cur.pageShownAt >= dwellMs(cur.pages[cur.page], this.pending.length);
   }
 
   // ── Pintado ────────────────────────────────────────────────
@@ -151,7 +176,7 @@ export class SubtitleRenderer {
     clearTimeout(this.tickTimer);
     const showPartial = this.settings.showPartial;
     const hasText = this.phraseMode
-      ? (!!this.current && !this.current.retired) || (showPartial && !!this.partial)
+      ? (!!this.current && !this.current.retired) || this.pending.length > 0 || (showPartial && !!this.partial)
       : this.finals.length > 0 || (showPartial && !!this.partial);
     this.box.classList.toggle('trtw-visible', hasText);
     const showEn = this.settings.bilingual && hasText;
@@ -166,33 +191,49 @@ export class SubtitleRenderer {
     else this._renderRolling(showEn);
   }
 
-  // Modo frase: o la frase actual (página a página) o el provisional, nunca juntos.
+  // Modo frase: la frase actual página a página, luego las que esperan en cola
+  // y, cuando ya no queda nada confirmado, el provisional. Nunca juntos.
   _renderPhrase(showEn) {
-    const cur = this.current && !this.current.retired ? this.current : null;
     const partial = this.settings.showPartial ? this.partial : null;
     const now = this.now();
+    let cur = this.current && !this.current.retired ? this.current : null;
+    if (!cur && this.pending.length) {
+      cur = this.current = this.pending.shift();
+      cur.pageShownAt = now;
+    }
 
     if (cur) {
-      if (!cur.pages) cur.pages = this._paginate(this.esLine, cur.es);
-      // Avanza páginas según el tiempo de lectura de cada una.
-      while (cur.page < cur.pages.length - 1 && now - cur.pageShownAt >= readingMs(cur.pages[cur.page])) {
-        cur.pageShownAt += readingMs(cur.pages[cur.page]);
-        cur.page++;
+      // Avanza páginas y frases de la cola según su tiempo de lectura.
+      for (;;) {
+        if (!cur.pages) cur.pages = this._paginate(this.esLine, cur.es);
+        const dwell = dwellMs(cur.pages[cur.page], this.pending.length);
+        if (now - cur.pageShownAt < dwell) break;
+        if (cur.page < cur.pages.length - 1) {
+          cur.pageShownAt += dwell;
+          cur.page++;
+        } else if (this.pending.length) {
+          const next = this.pending.shift();
+          next.pageShownAt = cur.pageShownAt + dwell;
+          cur = this.current = next;
+        } else {
+          break;
+        }
       }
-      const pageText = cur.pages[cur.page];
-      const readUntil = cur.pageShownAt + readingMs(pageText);
-      const lastPage = cur.page === cur.pages.length - 1;
 
-      if (!(lastPage && partial && now >= readUntil)) {
+      const lastPage = cur.page === cur.pages.length - 1;
+      const due = cur.pageShownAt + dwellMs(cur.pages[cur.page], this.pending.length);
+      const read = now >= due;
+
+      if (!(lastPage && read && partial)) {
         const more = cur.pages.length > 1 && !lastPage ? ' …' : '';
-        this._paint(this.esLine, [pageText + more], '');
+        this._paint(this.esLine, [cur.pages[cur.page] + more], '');
         if (showEn) this._fitHead(this.enLine, cur.en);
-        // Siguiente cambio: otra página o, si hay provisional, mostrarlo.
-        if (!lastPage || partial) this._tick(readUntil - now);
-        if (!lastPage) this._armHide(readUntil - now + HIDE_AFTER_MS);
+        // Siguiente cambio: otra página, la siguiente frase o el provisional.
+        if (!read && (!lastPage || this.pending.length || partial)) this._tick(due - now);
+        this._armHide(Math.max(0, due - now) + HIDE_AFTER_MS);
         return;
       }
-      // Ya leída y hay algo nuevo: la frase se retira y no vuelve a aparecer.
+      // Ya leída, sin nada en cola y hay algo nuevo: se retira y no vuelve.
       cur.retired = true;
     }
 
@@ -203,6 +244,7 @@ export class SubtitleRenderer {
       this._paint(this.enLine, [], partial.en);
       if (!this._fits(this.enLine)) this._trimFront(this.enLine, partial.en, true);
     }
+    this._armHide();
   }
 
   _tick(ms) {
