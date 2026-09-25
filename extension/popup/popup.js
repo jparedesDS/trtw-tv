@@ -1,6 +1,7 @@
 // trtw.tv — Popup: estado, Start/Stop y ajustes.
 
 import { DEFAULT_SETTINGS, MODELS, loadSettings, saveSettings } from '../lib/settings.js';
+import { createChromeTranslator } from '../lib/chrome-translator.js';
 
 const $ = (id) => document.getElementById(id);
 let settings = { ...DEFAULT_SETTINGS };
@@ -76,24 +77,15 @@ chrome.runtime.onMessage.addListener((message) => {
 // el clic en Start para iniciar la descarga desde aquí si hace falta.
 
 async function warmUpChromeTranslator() {
-  if (settings.translationEngine === 'opus' || !('Translator' in self)) return;
-  try {
-    const opts = { sourceLanguage: 'en', targetLanguage: 'es' };
-    const availability = await Translator.availability(opts);
-    if (availability === 'downloadable' || availability === 'downloading') {
-      await Translator.create({
-        ...opts,
-        monitor(m) {
-          m.addEventListener('downloadprogress', (e) => {
-            renderProgress({ stage: 'chrome', pct: Math.round(e.loaded * 100) });
-          });
-        }
-      });
-      renderProgress(null);
-    }
-  } catch (e) {
-    console.warn('[trtw.tv][popup] Translator:', e.message);
-  }
+  if (settings.translationEngine === 'opus') return;
+  const r = await createChromeTranslator({
+    allowDownload: true,
+    onProgress: (pct) => renderProgress({ stage: 'chrome', pct })
+  });
+  // Solo queríamos que Chrome tuviera el modelo: el offscreen crea su propio traductor.
+  r.translator?.destroy?.();
+  if (r.availability !== 'available') renderProgress(null);
+  if (r.error) console.warn('[trtw.tv][popup] Translator:', r.error);
 }
 
 // ── Start / Stop ────────────────────────────────────────────────

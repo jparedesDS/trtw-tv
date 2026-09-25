@@ -104,43 +104,57 @@ async function startCapture(tabId) {
   }
 
   const status = await getStatus();
+  const active = ['starting', 'loading', 'capturing'].includes(status.state);
 
   // Ya capturando esta pestaña → nada que hacer.
-  if (['starting', 'loading', 'capturing'].includes(status.state) && status.tabId === tabId) {
-    return { success: true, status };
+  if (active && status.tabId === tabId) return { success: true, status };
+
+  // 1) El streamId primero: si Chrome no deja capturar (falta el gesto del
+  //    usuario, página no permitida…), no tocamos nada de lo que ya funciona.
+  let streamId;
+  try {
+    streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+  } catch (e) {
+    log.warn('tabCapture:', e.message);
+    return { success: false, error: friendlyError(e.message) };
   }
 
-  // Otra pestaña → paramos la anterior.
-  if (['starting', 'loading', 'capturing'].includes(status.state)) {
-    await stopCapture({ keepOffscreen: true });
-  }
+  // 2) Si se estaba capturando otra pestaña, la paramos (los modelos se quedan).
+  if (active) await stopCapture({ keepOffscreen: true });
 
-  // Desde ERROR (o si no responde) se hace reset completo: cerrar el
-  // offscreen libera el stream de la pestaña y los modelos.
-  if (status.state === 'error') {
+  // 3) Reset completo solo si el offscreen está roto: no responde o su error
+  //    no es recuperable. Un fallo de captura conserva los modelos cargados.
+  if (status.state === 'error' && (status.unresponsive || !status.recoverable)) {
     log.info('Reset desde estado de error:', status.error);
     await closeOffscreen();
   }
 
+  setBadge('starting');
+  let resp;
   try {
-    setBadge('starting');
-    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
     await ensureOffscreen();
     const settings = await loadSettings();
-    const resp = await sendToOffscreen({ type: 'start', streamId, tabId, settings }, 15000);
-    if (!resp?.success) throw new Error(resp?.error || 'No se pudo iniciar la captura');
-
-    await chrome.storage.session.set({ activeTabId: tabId });
-    log.info('Captura iniciada en la pestaña', tabId);
-    return { success: true, status: resp.status };
+    resp = await sendToOffscreen({ type: 'start', streamId, tabId, settings }, 15000);
   } catch (e) {
-    log.error('Fallo al iniciar:', e.message);
-    // Estado limpio para que el siguiente intento empiece de cero.
+    // Sin respuesta: el offscreen está roto → el siguiente intento empieza de cero.
+    log.error('El offscreen no arrancó:', e.message);
     await closeOffscreen();
     await chrome.storage.session.remove('activeTabId');
     setBadge('error');
     return { success: false, error: friendlyError(e.message) };
   }
+
+  if (!resp?.success) {
+    // Falló la captura de audio; el offscreen ya está en 'error' recuperable.
+    log.error('Fallo al iniciar la captura:', resp?.error);
+    await chrome.storage.session.remove('activeTabId');
+    setBadge('error');
+    return { success: false, error: friendlyError(resp?.error || 'No se pudo iniciar la captura') };
+  }
+
+  await chrome.storage.session.set({ activeTabId: tabId });
+  log.info('Captura iniciada en la pestaña', tabId);
+  return { success: true, status: resp.status };
 }
 
 async function stopCapture({ keepOffscreen = true } = {}) {
@@ -221,9 +235,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'offscreen-idle':
       enqueue(async () => {
         const status = await getStatus();
-        if (status.state === 'idle') {
+        if (status.state === 'idle' || status.state === 'error') {
           log.info('Offscreen inactivo: cerrando para liberar memoria');
           await closeOffscreen();
+          setBadge('idle');
         }
       });
       return false;

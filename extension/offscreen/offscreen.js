@@ -33,14 +33,28 @@ function setStatus(patch) {
   }, 200);
 }
 
-function fail(error) {
+// recoverable = el fallo es solo de la captura de audio (streamId caducado,
+// pestaña cerrada…): los modelos siguen sirviendo y se conservan para el
+// siguiente Start. Si falla el propio pipeline, se descarta y se empieza de cero.
+function fail(error, { recoverable = false } = {}) {
   const message = error?.message || String(error);
-  log.error('Error fatal:', message);
+  log.error(recoverable ? 'Error de captura:' : 'Error fatal:', message);
   teardownAudio();
-  // El siguiente Start empezará con un pipeline nuevo.
-  pipeline?.dispose();
-  pipeline = null;
-  setStatus({ state: 'error', error: message });
+  if (!recoverable) {
+    pipeline?.dispose();
+    pipeline = null;
+  }
+  setStatus({ state: 'error', error: message, recoverable });
+  armIdleClose();
+}
+
+// Si nadie vuelve a pulsar Start en un rato, pedimos que nos cierren para
+// liberar los modelos (memoria / GPU).
+function armIdleClose() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    chrome.runtime.sendMessage({ type: 'offscreen-idle' }).catch(() => {});
+  }, IDLE_CLOSE_MS);
 }
 
 // ── Captura ─────────────────────────────────────────────────────
@@ -48,7 +62,7 @@ function fail(error) {
 async function start({ streamId, tabId, settings }) {
   clearTimeout(idleTimer);
   teardownAudio();
-  setStatus({ state: 'starting', tabId, error: null, modelId: settings.modelId });
+  setStatus({ state: 'starting', tabId, error: null, recoverable: null, modelId: settings.modelId });
 
   // 1) Modelos: reutilizamos el pipeline si el modelo/backend no han cambiado.
   if (pipeline && !pipeline.isCompatible(settings)) {
@@ -110,7 +124,7 @@ async function start({ streamId, tabId, settings }) {
     );
   } else {
     setStatus({ state: 'capturing' });
-    p.prepareForTab().catch((e) => log.warn('Traductor:', e.message));
+    p.prepareForTab();
   }
 }
 
@@ -136,11 +150,7 @@ function stop() {
   setStatus({ state: 'idle', tabId: null, partial: null });
   log.info('Captura detenida');
 
-  // Si nadie vuelve a pulsar Start en un rato, pedimos que nos cierren.
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    chrome.runtime.sendMessage({ type: 'offscreen-idle' }).catch(() => {});
-  }, IDLE_CLOSE_MS);
+  armIdleClose();
 }
 
 // ── Mensajes ────────────────────────────────────────────────────
@@ -153,7 +163,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       start(message).then(
         () => sendResponse({ success: true, status }),
         (e) => {
-          fail(e);
+          // Todo lo que puede fallar en start() es la captura de audio.
+          fail(e, { recoverable: true });
           sendResponse({ success: false, error: e.message });
         }
       );

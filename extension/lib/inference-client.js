@@ -1,10 +1,12 @@
-// Cliente del worker de inferencia: convierte los mensajes en promesas.
+// Cliente de un worker de inferencia (workers/asr-worker.js): convierte los
+// mensajes en promesas. Hay dos instancias: una para Whisper y otra para
+// Opus-MT, cada una con su hilo, así una descarga o traducción no frena a la otra.
 
 import { createLogger } from './log.js';
 
 const log = createLogger('worker');
 
-export class AsrClient {
+export class InferenceClient {
   constructor({ baseUrl, onProgress }) {
     this.worker = new Worker(baseUrl + 'dist/asr-worker.js', { type: 'module' });
     this.pending = new Map();

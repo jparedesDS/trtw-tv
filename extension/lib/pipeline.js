@@ -2,7 +2,7 @@
 // Lo usan el documento offscreen y la página de test (mismo código).
 
 import * as ort from 'onnxruntime-web';
-import { AsrClient } from './asr-client.js';
+import { InferenceClient } from './inference-client.js';
 import { SileroVad } from './vad.js';
 import { Streamer } from './streamer.js';
 import { judgeSegment } from './hallucination-filter.js';
@@ -28,20 +28,25 @@ export class Pipeline {
     this.partialBusy = false;
     this.latencyMs = null;
 
-    this.asr = new AsrClient({
+    this.asrLoading = false;
+
+    const progress = (p) => ({ progress: { stage: p.stage, pct: p.pct, loaded: p.loaded, total: p.total } });
+    this.asr = new InferenceClient({ baseUrl, onProgress: (p) => this.onStatus(progress(p)) });
+    this.mt = null; // worker de Opus-MT: solo se crea si hace falta
+    this._newMtClient = () => new InferenceClient({
       baseUrl,
-      onProgress: (p) => this.onStatus({
-        progress: { stage: p.stage, pct: p.pct, loaded: p.loaded, total: p.total }
-      })
+      // Mientras se descarga Whisper, la barra de progreso es suya.
+      onProgress: (p) => { if (!this.asrLoading) this.onStatus(progress(p)); }
     });
 
     this.translator = new TranslationService({
-      asrClient: this.asr,
+      getMtClient: () => (this.mt ??= this._newMtClient()),
       relay: tabRelay || null,
-      log,
-      onProgress: (p) => this.onStatus({ progress: p })
+      log
     });
-    this.translator.onEngineChange = (engine) => this.onStatus({ engine, warning: null });
+    this.translator.onEngineChange = ({ engine, warning }) => {
+      if (!this.disposed) this.onStatus({ engine, warning, ...(this.asrLoading ? {} : { progress: null }) });
+    };
     this._applyTranslationSettings();
   }
 
@@ -59,14 +64,27 @@ export class Pipeline {
   }
 
   async _load() {
+    this.asrLoading = true;
+    // El traductor se prepara en paralelo (en su propio worker si es Opus-MT)
+    // y nunca bloquea: hasta que esté listo, los subtítulos salen en inglés.
+    this._initTranslator();
+
     // ORT del hilo principal: solo para el VAD (diminuto) → 1 hilo, WASM local.
     ort.env.wasm.wasmPaths = this.baseUrl + 'vendor/ort/';
     ort.env.wasm.numThreads = 1;
     this.vad = await SileroVad.create(ort, this.baseUrl + 'models/silero/silero_vad_v5.onnx');
+    this._checkDisposed();
     log.info('Silero VAD listo');
 
-    await this.asr.ready;
-    const info = await this.asr.loadAsr(this.settings.modelId, this.settings.device);
+    let info;
+    try {
+      await this.asr.ready;
+      this._checkDisposed();
+      info = await this.asr.loadAsr(this.settings.modelId, this.settings.device);
+      this._checkDisposed();
+    } finally {
+      this.asrLoading = false;
+    }
     this.loaded = info;
     log.info(`Whisper: ${info.modelId} en ${info.device}`, info.gpuName || '', info.gpuReason || '');
     this.onStatus({
@@ -76,8 +94,6 @@ export class Pipeline {
       modelId: info.modelId,
       progress: null
     });
-
-    await this._initTranslator();
 
     this.streamer = new Streamer({
       vad: this.vad,
@@ -100,9 +116,23 @@ export class Pipeline {
     this.ready = true;
   }
 
+  // Si se descarta el pipeline a mitad de carga, abortamos en lugar de
+  // terminar de montar un pipeline muerto.
+  _checkDisposed() {
+    if (!this.disposed) return;
+    this.vad?.release().catch(() => {}); // pudo crearse después de dispose()
+    throw new Error('Pipeline descartado durante la carga');
+  }
+
+  // Nunca lanza. Si otra llamada posterior la adelanta, su resultado se ignora.
   async _initTranslator() {
-    const { engine, warning } = await this.translator.init(this.settings.translationEngine);
-    this.onStatus({ engine, warning, progress: null });
+    try {
+      const r = await this.translator.init(this.settings.translationEngine);
+      if (r.stale || this.disposed) return;
+      this.onStatus({ engine: r.engine, warning: r.warning, ...(this.asrLoading ? {} : { progress: null }) });
+    } catch (e) {
+      log.warn('Traductor:', e.message);
+    }
   }
 
   _applyTranslationSettings() {
@@ -114,7 +144,7 @@ export class Pipeline {
     const engineChanged = s.translationEngine && s.translationEngine !== this.settings.translationEngine;
     this.settings = { ...this.settings, ...s };
     this._applyTranslationSettings();
-    if (engineChanged && this.ready) this._initTranslator().catch((e) => log.warn(e.message));
+    if (engineChanged && this.loading) this._initTranslator();
   }
 
   pushFrame(frame) {
@@ -122,10 +152,10 @@ export class Pipeline {
   }
 
   // Al empezar en otra pestaña: el relé de traducción apunta a la pestaña nueva,
-  // así que volvemos a elegir motor si dependíamos de ella.
-  async prepareForTab() {
+  // así que volvemos a elegir motor si dependíamos de ella. No bloquea.
+  prepareForTab() {
     this.resetStream();
-    if (this.translator.name === 'chrome-tab' || this.translator.name === 'none') await this._initTranslator();
+    if (this.translator.name === 'chrome-tab' || this.translator.name === 'none') this._initTranslator();
   }
 
   resetStream() {
@@ -203,6 +233,7 @@ export class Pipeline {
     this.streamer?.reset();
     this.translator.dispose();
     this.asr.terminate();
-    this.vad?.release();
+    this.mt?.terminate();
+    this.vad?.release().catch(() => {});
   }
 }
