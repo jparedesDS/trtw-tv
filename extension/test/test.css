@@ -1,0 +1,46 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #0e0e10;
+  color: #e4e4e7;
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+header { padding: 20px 24px 8px; }
+header h1 { margin: 0 0 4px; font-size: 20px; }
+header p { margin: 0; color: #a1a1aa; }
+main { padding: 12px 24px 40px; display: grid; gap: 16px; max-width: 1280px; }
+.card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 16px; }
+.card h2 { margin: 0 0 12px; font-size: 15px; }
+.card h3 { margin: 16px 0 8px; font-size: 13px; color: #a1a1aa; }
+.row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 12px; }
+label { display: inline-flex; gap: 6px; align-items: center; color: #d4d4d8; }
+select, button {
+  background: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 6px;
+  padding: 6px 10px; font: inherit;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: #7c3aed; }
+button:disabled { opacity: 0.45; cursor: default; }
+#load { background: #7c3aed; border-color: #7c3aed; }
+.file input { display: none; }
+.file span { background: #27272a; border: 1px dashed #52525b; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.muted { color: #71717a; }
+.status { display: flex; flex-wrap: wrap; gap: 8px 20px; color: #a1a1aa; font-size: 13px; }
+.status strong { color: #e4e4e7; }
+.progress { position: relative; height: 18px; margin-top: 10px; background: #27272a; border-radius: 4px; overflow: hidden; }
+#progress-fill { height: 100%; width: 0; background: #7c3aed; transition: width 0.2s; }
+#progress-text { position: absolute; inset: 0; font-size: 11px; line-height: 18px; padding-left: 8px; }
+.hidden { display: none; }
+.player {
+  position: relative; aspect-ratio: 16 / 9; width: 100%; border-radius: 6px; overflow: hidden;
+  background: radial-gradient(circle at 30% 30%, #3b3b5c, #111118 70%);
+}
+.player-hint { position: absolute; top: 10px; left: 12px; color: #52525b; font-size: 12px; }
+canvas { width: 100%; height: 120px; background: #111114; border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #27272a; vertical-align: top; }
+th { color: #a1a1aa; font-weight: 600; }
+td.num { white-space: nowrap; font-variant-numeric: tabular-nums; color: #a1a1aa; }
+.rejects { margin: 0; padding-left: 18px; color: #fca5a5; font-size: 13px; }
+.rejects em { color: #a1a1aa; font-style: normal; }
+pre#log { margin: 0; max-height: 260px; overflow: auto; font-size: 12px; color: #a1a1aa; white-space: pre-wrap; }

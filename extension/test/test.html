@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>trtw.tv · página de test</title>
+  <link rel="stylesheet" href="test.css">
+  <link rel="stylesheet" href="../content/overlay.css">
+</head>
+<body>
+  <header>
+    <h1>trtw.tv · página de test</h1>
+    <p>Pasa un audio local por el mismo pipeline que la extensión (VAD → Whisper → filtro → traducción → overlay) sin necesidad de un directo.</p>
+  </header>
+
+  <main>
+    <section class="card controls">
+      <div class="row">
+        <label class="file">
+          <input type="file" id="file" accept="audio/*,.wav,.mp3">
+          <span>Elegir audio (.wav / .mp3)…</span>
+        </label>
+        <button id="sample" type="button">Usar ejemplo (JFK, 11 s)</button>
+        <span id="file-name" class="muted">Ningún audio cargado</span>
+      </div>
+
+      <div class="row">
+        <label>Modelo <select id="model"></select></label>
+        <label>Backend
+          <select id="device">
+            <option value="auto">Automático</option>
+            <option value="webgpu">WebGPU</option>
+            <option value="wasm">WASM</option>
+          </select>
+        </label>
+        <label>Traducción
+          <select id="engine">
+            <option value="auto">Automático</option>
+            <option value="chrome">Chrome integrado</option>
+            <option value="opus">Opus-MT</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="bilingual"> Bilingüe</label>
+        <label><input type="checkbox" id="partial"> Parciales</label>
+        <label><input type="checkbox" id="context"> Contexto</label>
+      </div>
+
+      <div class="row">
+        <button id="load" type="button">1 · Cargar modelos</button>
+        <button id="realtime" type="button" disabled>▶ Tiempo real (worklet)</button>
+        <button id="fast" type="button" disabled>⏩ Rápido</button>
+        <button id="stop" type="button" disabled>■ Parar</button>
+        <button id="vad" type="button" disabled>Analizar solo VAD</button>
+      </div>
+
+      <div class="status">
+        <span>Backend: <strong id="st-device">—</strong></span>
+        <span>Traducción: <strong id="st-engine">—</strong></span>
+        <span>ASR: <strong id="st-asr">—</strong></span>
+        <span>Latencia media: <strong id="st-latency">—</strong></span>
+        <span>Aislamiento: <strong id="st-coi">—</strong></span>
+      </div>
+      <div id="progress" class="progress hidden"><div id="progress-fill"></div><span id="progress-text"></span></div>
+    </section>
+
+    <section class="card">
+      <h2>Overlay simulado</h2>
+      <div id="player" class="player"><div class="player-hint">16:9 · el texto se pinta con el mismo código que en Twitch</div></div>
+    </section>
+
+    <section class="card">
+      <h2>VAD (probabilidad de voz)</h2>
+      <canvas id="vad-canvas" width="1200" height="120"></canvas>
+      <p class="muted">Línea discontinua: umbral de voz 0,5 · Barras moradas: tramas con voz</p>
+    </section>
+
+    <section class="card">
+      <h2>Resultados</h2>
+      <table>
+        <thead><tr><th>#</th><th>Audio</th><th>Inglés</th><th>Español</th><th>Latencia</th><th>logprob</th><th>no_speech</th></tr></thead>
+        <tbody id="results"></tbody>
+      </table>
+      <h3>Descartados por el filtro</h3>
+      <ul id="rejects" class="rejects"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Registro</h2>
+      <pre id="log"></pre>
+    </section>
+  </main>
+
+  <script src="../dist/test.js" type="module"></script>
+</body>
+</html>

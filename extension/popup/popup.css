@@ -500,3 +500,76 @@ body {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ── v2 ────────────────────────────────────────────────────── */
+
+.error-box {
+  margin: 0 20px 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 20px 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.info-grid strong {
+  color: #e4e4e7;
+  font-weight: 600;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-label { white-space: normal; flex-shrink: 1; }
+
+.hint {
+  font-size: 11px;
+  color: #71717a;
+  margin: -4px 0 6px;
+}
+
+.glossary summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-weight: 500;
+  color: #d4d4d8;
+}
+
+.textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #e4e4e7;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #7c3aed;
+}
+
+.footer a {
+  color: #a78bfa;
+  text-decoration: none;
+}
+
+.footer a:hover { text-decoration: underline; }

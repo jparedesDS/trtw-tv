@@ -1,249 +1,200 @@
-// trtw.tv Popup — Settings UI controller
+// trtw.tv — Popup: estado, Start/Stop y ajustes.
 
-const DEFAULT_SETTINGS = {
-  modelId: 'onnx-community/whisper-tiny',
-  sourceLanguage: 'auto',
-  task: 'transcribe',
-  translateToEnglish: false,
-  targetLanguage: 'es',
-  fontSize: 20,
-  textColor: '#FFFFFF',
-  bgOpacity: 0.78,
-  subtitlePosition: 'bottom',
-  useCloudApi: false,
-  cloudApiKey: ''
+import { DEFAULT_SETTINGS, MODELS, loadSettings, saveSettings } from '../lib/settings.js';
+
+const $ = (id) => document.getElementById(id);
+let settings = { ...DEFAULT_SETTINGS };
+let currentState = 'idle';
+
+const STATES = {
+  idle: { badge: 'status-idle', text: 'Parado', label: 'Start', active: false },
+  starting: { badge: 'status-loading', text: 'Iniciando…', label: 'Stop', active: true },
+  loading: { badge: 'status-loading', text: 'Cargando…', label: 'Stop', active: true },
+  capturing: { badge: 'status-capturing', text: 'En directo', label: 'Stop', active: true },
+  error: { badge: 'status-error', text: 'Error', label: 'Reintentar', active: false }
 };
 
-let settings = { ...DEFAULT_SETTINGS };
-let isCapturing = false;
-let debounceTimer = null;
+const ENGINE_NAMES = {
+  chrome: 'Chrome integrado',
+  'chrome-tab': 'Chrome integrado (pestaña)',
+  opus: 'Opus-MT (local)',
+  none: 'Sin traducción'
+};
 
-// ── DOM Elements ────────────────────────────────────────────
+// ── Estado ──────────────────────────────────────────────────────
 
-const els = {};
+function render(status = {}) {
+  currentState = status.state || 'idle';
+  const s = STATES[currentState] || STATES.idle;
+  $('status-badge').className = 'status-badge ' + s.badge;
+  $('status-text').textContent = s.text;
+  $('toggle-label').textContent = s.label;
+  $('main-toggle').classList.toggle('active', s.active);
 
-function initElements() {
-  els.mainToggle = document.getElementById('main-toggle');
-  els.toggleLabel = document.getElementById('toggle-label');
-  els.statusBadge = document.getElementById('status-badge');
-  els.statusText = document.getElementById('status-text');
-  els.progressSection = document.getElementById('progress-section');
-  els.progressLabel = document.getElementById('progress-label');
-  els.progressPercent = document.getElementById('progress-percent');
-  els.progressFill = document.getElementById('progress-fill');
-  els.modelSelect = document.getElementById('model-select');
-  els.sourceLang = document.getElementById('source-lang');
-  els.translateToggle = document.getElementById('translate-toggle');
-  els.targetLangGroup = document.getElementById('target-lang-group');
-  els.targetLang = document.getElementById('target-lang');
-  els.fontSize = document.getElementById('font-size');
-  els.fontSizeValue = document.getElementById('font-size-value');
-  els.bgOpacity = document.getElementById('bg-opacity');
-  els.bgOpacityValue = document.getElementById('bg-opacity-value');
-  els.colorOptions = document.getElementById('color-options');
-  els.positionSelect = document.getElementById('position-select');
-  els.cloudToggle = document.getElementById('cloud-toggle');
-  els.apiKeyGroup = document.getElementById('api-key-group');
-  els.apiKey = document.getElementById('api-key');
-}
+  const err = $('error-box');
+  const errorText = currentState === 'error' ? status.error : status.warning;
+  err.textContent = errorText || '';
+  err.classList.toggle('hidden', !errorText);
 
-// ── Settings Load/Save ──────────────────────────────────────
-
-async function loadSettings() {
-  try {
-    const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-    settings = { ...DEFAULT_SETTINGS, ...stored };
-  } catch {
-    settings = { ...DEFAULT_SETTINGS };
+  if (status.device) {
+    const dev = status.device === 'webgpu' ? 'WebGPU' : 'WASM (CPU)';
+    $('info-device').textContent = status.gpuName ? `${dev} · ${status.gpuName}` : dev;
+    $('info-device').title = status.gpuReason ? `Sin WebGPU: ${status.gpuReason}` : '';
   }
+  if (status.engine) $('info-engine').textContent = ENGINE_NAMES[status.engine] || status.engine;
+  if (status.stats?.latencyMs) $('info-latency').textContent = (status.stats.latencyMs / 1000).toFixed(1) + ' s';
 
-  // Apply to UI
-  els.modelSelect.value = settings.modelId;
-  els.sourceLang.value = settings.sourceLanguage;
-  els.translateToggle.checked = settings.translateToEnglish;
-  els.targetLang.value = settings.targetLanguage;
-  els.targetLangGroup.classList.toggle('hidden', !settings.translateToEnglish);
-  els.fontSize.value = settings.fontSize;
-  els.fontSizeValue.textContent = settings.fontSize + 'px';
-  els.bgOpacity.value = Math.round(settings.bgOpacity * 100);
-  els.bgOpacityValue.textContent = Math.round(settings.bgOpacity * 100) + '%';
-  els.positionSelect.value = settings.subtitlePosition;
-  els.cloudToggle.checked = settings.useCloudApi;
-  els.apiKey.value = settings.cloudApiKey;
-
-  // Color buttons
-  els.colorOptions.querySelectorAll('.color-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.color === settings.textColor);
-  });
-
-  // API key visibility
-  els.apiKeyGroup.classList.toggle('hidden', !settings.useCloudApi);
+  renderProgress(status.progress);
 }
 
-function saveSettings() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(async () => {
-    try {
-      await chrome.storage.sync.set(settings);
-    } catch (e) {
-      console.error('[trtw.tv] Failed to save settings:', e);
-    }
-  }, 300);
+function renderProgress(p) {
+  const box = $('progress-section');
+  if (!p) return box.classList.add('hidden');
+  box.classList.remove('hidden');
+  const what = p.stage === 'mt' ? 'traductor' : p.stage === 'chrome' ? 'traductor de Chrome' : 'modelo de voz';
+  const mb = p.total ? ` (${Math.round(p.loaded / 1e6)}/${Math.round(p.total / 1e6)} MB)` : '';
+  $('progress-label').textContent = `Descargando ${what}${mb}…`;
+  $('progress-percent').textContent = p.pct == null ? '' : p.pct + '%';
+  $('progress-fill').style.width = (p.pct ?? 0) + '%';
 }
 
-// ── State Management ────────────────────────────────────────
-
-async function queryState() {
+async function refresh() {
   try {
-    const response = await chrome.runtime.sendMessage({ type: 'get-state' });
-    if (response) {
-      updateUI(response.state);
-    }
+    render(await chrome.runtime.sendMessage({ type: 'get-state' }));
   } catch {
-    updateUI('idle');
+    render({ state: 'idle' });
   }
 }
-
-function updateUI(state) {
-  const states = {
-    idle: { badge: 'status-idle', text: 'Idle', label: 'Start Subtitles', active: false },
-    starting: { badge: 'status-loading', text: 'Starting...', label: 'Starting...', active: false },
-    capturing: { badge: 'status-capturing', text: 'Capturing', label: 'Stop Subtitles', active: true },
-    stopping: { badge: 'status-loading', text: 'Stopping...', label: 'Stopping...', active: false },
-    error: { badge: 'status-error', text: 'Error', label: 'Retry', active: false }
-  };
-
-  const s = states[state] || states.idle;
-  isCapturing = s.active;
-
-  els.statusBadge.className = 'status-badge ' + s.badge;
-  els.statusText.textContent = s.text;
-  els.toggleLabel.textContent = s.label;
-  els.mainToggle.classList.toggle('active', s.active);
-}
-
-// ── Event Handlers ──────────────────────────────────────────
-
-function setupListeners() {
-  // Main toggle
-  els.mainToggle.addEventListener('click', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
-
-    if (isCapturing) {
-      updateUI('stopping');
-      const result = await chrome.runtime.sendMessage({ type: 'stop-capture' });
-      updateUI(result.success ? 'idle' : 'error');
-    } else {
-      updateUI('starting');
-      const result = await chrome.runtime.sendMessage({
-        type: 'start-capture',
-        tabId: tab.id
-      });
-      updateUI(result.success ? 'capturing' : 'error');
-    }
-  });
-
-  // Model selection
-  els.modelSelect.addEventListener('change', () => {
-    settings.modelId = els.modelSelect.value;
-    saveSettings();
-  });
-
-  // Source language
-  els.sourceLang.addEventListener('change', () => {
-    settings.sourceLanguage = els.sourceLang.value;
-    saveSettings();
-  });
-
-  // Translate toggle
-  els.translateToggle.addEventListener('change', () => {
-    settings.translateToEnglish = els.translateToggle.checked;
-    settings.task = settings.translateToEnglish ? 'translate' : 'transcribe';
-    els.targetLangGroup.classList.toggle('hidden', !settings.translateToEnglish);
-    saveSettings();
-  });
-
-  // Target language
-  els.targetLang.addEventListener('change', () => {
-    settings.targetLanguage = els.targetLang.value;
-    saveSettings();
-  });
-
-  // Font size slider
-  els.fontSize.addEventListener('input', () => {
-    settings.fontSize = parseInt(els.fontSize.value, 10);
-    els.fontSizeValue.textContent = settings.fontSize + 'px';
-    saveSettings();
-  });
-
-  // Background opacity slider
-  els.bgOpacity.addEventListener('input', () => {
-    const val = parseInt(els.bgOpacity.value, 10);
-    settings.bgOpacity = val / 100;
-    els.bgOpacityValue.textContent = val + '%';
-    saveSettings();
-  });
-
-  // Color buttons
-  els.colorOptions.addEventListener('click', (e) => {
-    const btn = e.target.closest('.color-btn');
-    if (!btn) return;
-
-    els.colorOptions.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    settings.textColor = btn.dataset.color;
-    saveSettings();
-  });
-
-  // Position select
-  els.positionSelect.addEventListener('change', () => {
-    settings.subtitlePosition = els.positionSelect.value;
-    saveSettings();
-  });
-
-  // Cloud API toggle
-  els.cloudToggle.addEventListener('change', () => {
-    settings.useCloudApi = els.cloudToggle.checked;
-    els.apiKeyGroup.classList.toggle('hidden', !settings.useCloudApi);
-    saveSettings();
-  });
-
-  // API key input
-  els.apiKey.addEventListener('input', () => {
-    settings.cloudApiKey = els.apiKey.value;
-    saveSettings();
-  });
-}
-
-// ── Model Progress Listener ─────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type !== 'model-progress') return;
+  if (message?.type === 'status') render(message.status);
+  return false;
+});
 
-  if (message.status === 'loading') {
-    els.progressSection.classList.remove('hidden');
-    els.progressLabel.textContent = 'Loading model...';
-    els.progressPercent.textContent = '';
-    els.progressFill.style.width = '0%';
-  } else if (message.status === 'ready') {
-    els.progressSection.classList.add('hidden');
-  } else if (message.progress !== undefined) {
-    els.progressSection.classList.remove('hidden');
-    const percent = Math.round(message.progress);
-    els.progressLabel.textContent = message.file
-      ? `Downloading ${message.file.split('/').pop()}...`
-      : 'Downloading model...';
-    els.progressPercent.textContent = percent + '%';
-    els.progressFill.style.width = percent + '%';
+// ── Chrome Translator: la descarga del modelo necesita un gesto del usuario ──
+// El documento offscreen no tiene "activación de usuario", así que aprovechamos
+// el clic en Start para iniciar la descarga desde aquí si hace falta.
+
+async function warmUpChromeTranslator() {
+  if (settings.translationEngine === 'opus' || !('Translator' in self)) return;
+  try {
+    const opts = { sourceLanguage: 'en', targetLanguage: 'es' };
+    const availability = await Translator.availability(opts);
+    if (availability === 'downloadable' || availability === 'downloading') {
+      await Translator.create({
+        ...opts,
+        monitor(m) {
+          m.addEventListener('downloadprogress', (e) => {
+            renderProgress({ stage: 'chrome', pct: Math.round(e.loaded * 100) });
+          });
+        }
+      });
+      renderProgress(null);
+    }
+  } catch (e) {
+    console.warn('[trtw.tv][popup] Translator:', e.message);
   }
-});
+}
 
-// ── Init ────────────────────────────────────────────────────
+// ── Start / Stop ────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', async () => {
-  initElements();
-  await loadSettings();
-  setupListeners();
-  await queryState();
-});
+async function onToggle() {
+  const active = STATES[currentState]?.active;
+  if (!active) warmUpChromeTranslator(); // antes de cualquier await: conserva el gesto
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active) {
+    render({ state: 'idle' });
+    await chrome.runtime.sendMessage({ type: 'stop-capture' });
+    return refresh();
+  }
+  if (!tab) return;
+  render({ state: 'starting' });
+  const result = await chrome.runtime.sendMessage({ type: 'start-capture', tabId: tab.id });
+  if (!result?.success) return render({ state: 'error', error: result?.error || 'No se pudo iniciar' });
+  render(result.status || { state: 'loading' });
+}
+
+// ── Ajustes ─────────────────────────────────────────────────────
+
+let saveTimer = null;
+let pendingPatch = {};
+function save(patch) {
+  Object.assign(settings, patch);
+  Object.assign(pendingPatch, patch);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const p = pendingPatch;
+    pendingPatch = {};
+    saveSettings(p).catch(console.error);
+  }, 250);
+}
+
+function bindSettings() {
+  const model = $('model-select');
+  for (const m of MODELS) model.add(new Option(m.label, m.id));
+  model.value = settings.modelId;
+  model.onchange = () => save({ modelId: model.value });
+
+  $('device-select').value = settings.device;
+  $('device-select').onchange = (e) => save({ device: e.target.value });
+
+  $('engine-select').value = settings.translationEngine;
+  $('engine-select').onchange = (e) => save({ translationEngine: e.target.value });
+
+  $('context-toggle').checked = settings.translateWithContext;
+  $('context-toggle').onchange = (e) => save({ translateWithContext: e.target.checked });
+
+  $('glossary').value = settings.glossary;
+  $('glossary').oninput = (e) => save({ glossary: e.target.value });
+
+  $('bilingual-toggle').checked = settings.bilingual;
+  $('bilingual-toggle').onchange = (e) => save({ bilingual: e.target.checked });
+
+  $('partial-toggle').checked = settings.showPartial;
+  $('partial-toggle').onchange = (e) => save({ showPartial: e.target.checked });
+
+  const fs = $('font-size');
+  fs.value = settings.fontSize;
+  $('font-size-value').textContent = settings.fontSize + 'px';
+  fs.oninput = () => {
+    $('font-size-value').textContent = fs.value + 'px';
+    save({ fontSize: +fs.value });
+  };
+
+  const op = $('bg-opacity');
+  op.value = Math.round(settings.bgOpacity * 100);
+  $('bg-opacity-value').textContent = op.value + '%';
+  op.oninput = () => {
+    $('bg-opacity-value').textContent = op.value + '%';
+    save({ bgOpacity: op.value / 100 });
+  };
+
+  const colors = $('color-options');
+  const markColor = () => colors.querySelectorAll('.color-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.color === settings.textColor);
+  });
+  markColor();
+  colors.onclick = (e) => {
+    const btn = e.target.closest('.color-btn');
+    if (!btn) return;
+    save({ textColor: btn.dataset.color });
+    markColor();
+  };
+
+  $('position-select').value = settings.subtitlePosition;
+  $('position-select').onchange = (e) => save({ subtitlePosition: e.target.value });
+
+  $('test-link').onclick = (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('test/test.html') });
+  };
+  $('version').textContent = 'v' + chrome.runtime.getManifest().version;
+}
+
+// ── Init ────────────────────────────────────────────────────────
+
+settings = await loadSettings();
+bindSettings();
+$('main-toggle').addEventListener('click', onToggle);
+await refresh();

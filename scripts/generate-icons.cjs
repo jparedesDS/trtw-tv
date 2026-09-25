@@ -1,10 +1,10 @@
 /**
- * generate-icons.js
+ * generate-icons.cjs
  *
  * Generates PNG icon files for the trtw.tv Chrome extension.
  * No dependencies required - creates valid PNG files from raw pixel data.
  *
- * Usage:  node scripts/generate-icons.js
+ * Usage:  node scripts/generate-icons.cjs
  * Output: extension/icons/icon16.png, icon48.png, icon128.png
  */
 
